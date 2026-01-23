@@ -1,15 +1,3 @@
-import os
-import streamlit as st
-
-# === 调试代码：查看服务器上的文件结构 ===
-st.write("Current Working Directory:", os.getcwd())
-st.write("Files in root:", os.listdir('.'))
-if os.path.exists('modules'):
-    st.write("Files in modules:", os.listdir('modules'))
-else:
-    st.error("❌ 'modules' folder NOT found!")
-# ========================================
-
 import streamlit as st
 import pandas as pd
 import numpy as np
@@ -349,4 +337,5 @@ st.markdown("""
     &copy; 2025 Medical Informatics Dept.
 </div>
 """, unsafe_allow_html=True)
+
 
