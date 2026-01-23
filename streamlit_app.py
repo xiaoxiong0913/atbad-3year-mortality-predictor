@@ -7,6 +7,7 @@ import io
 import matplotlib.pyplot as plt
 import shap
 import plotly.graph_objects as go
+import datetime # 引入时间模块
 
 # ================= 1. 引用自定义模块 =================
 from modules.database import PatientDatabase
@@ -23,7 +24,6 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
-# 加载外部 CSS
 def local_css(file_name):
     try:
         with open(file_name) as f:
@@ -44,7 +44,6 @@ local_css("assets/style.css")
 def load_system():
     BASE_DIR = os.path.dirname(os.path.abspath(__file__))
     ASSETS_DIR = os.path.join(BASE_DIR, "assets")
-    
     try:
         with open(os.path.join(ASSETS_DIR, "Naive_Bayes_Model.pkl"), 'rb') as f: model = pickle.load(f)
         with open(os.path.join(ASSETS_DIR, "scaler.pkl"), 'rb') as f: scaler = pickle.load(f)
@@ -56,21 +55,18 @@ def load_system():
 
 model, scaler, imputer = load_system()
 db = PatientDatabase()
-
 THRESHOLD = 0.193
 
 # ================= 4. 侧边栏导航 =================
 with st.sidebar:
     st.title("🩺 DR-MACE System")
-    st.caption("ver 2.0.1 | Stable Build")
+    st.caption("ver 2.0.2 | Enterprise Edition")
     st.markdown("---")
-    
     page = st.radio(
         "System Navigation", 
         ["Individual Assessment", "Batch Cohort Analysis", "Clinical Dashboard", "System Documentation"],
         index=0
     )
-    
     st.markdown("---")
     if model:
         st.success("✅ Model Online")
@@ -92,7 +88,6 @@ if page == "Individual Assessment":
             gender = st.radio("Gender", ["Male", "Female"], horizontal=True)
             sbp = st.number_input("Systolic BP (mmHg)", 50, 250, 130)
             t_wave = st.selectbox("ECG: T-Wave Abnormalities", [0, 1], format_func=lambda x: "Present" if x==1 else "Absent")
-            
         with col2:
             st.markdown("#### Laboratory & Meds")
             hgb = st.number_input("Hemoglobin (g/L)", 30, 250, 135)
@@ -106,7 +101,6 @@ if page == "Individual Assessment":
             'BUN(mmol/L)': bun, 'SBP(mmHg)': sbp, 'HGB(g/L)': hgb,
             'T wave  abnormalities': t_wave, 'Statins': statins, 'Gender': gender
         }
-        
         cols = ['BUN(mmol/L)', 'SBP(mmHg)', 'HGB(g/L)', 'T wave  abnormalities', 'Statins']
         df_raw = pd.DataFrame([inputs]).drop(columns=['Gender'])[cols]
         
@@ -114,19 +108,15 @@ if page == "Individual Assessment":
             X_imp = imputer.transform(df_raw)
             X_scl = scaler.transform(X_imp)
             df_scl = pd.DataFrame(X_scl, columns=cols)
-            
             prob = model.predict_proba(df_scl)[:, 1][0]
             risk_label = "High Risk" if prob >= THRESHOLD else "Low Risk"
-            
             db.add_record(inputs, prob, risk_label)
-            
         except Exception as e:
             st.error(f"Computation Error: {e}")
             st.stop()
 
         st.divider()
         res_c1, res_c2 = st.columns([1, 1])
-        
         with res_c1:
             gauge_color = "#dc3545" if prob >= THRESHOLD else "#28a745"
             fig = go.Figure(go.Indicator(
@@ -145,7 +135,6 @@ if page == "Individual Assessment":
                 explainer = shap.KernelExplainer(model.predict_proba, background)
                 shap_values = explainer.shap_values(df_scl, nsamples=100)
                 
-                # === SHAP 数据结构处理 ===
                 if isinstance(shap_values, list): sv = shap_values[1][0]
                 elif len(np.array(shap_values).shape) == 3: sv = shap_values[0][:, 1]
                 else: sv = shap_values[0]
@@ -154,16 +143,12 @@ if page == "Individual Assessment":
                 if isinstance(ev, np.ndarray) and ev.size > 1: base_val = ev[1]
                 elif isinstance(ev, list): base_val = ev[1]
                 else: base_val = ev
-                
                 if hasattr(base_val, 'item'): base_val = base_val.item()
                 
                 exp = shap.Explanation(
-                    values=sv, 
-                    base_values=base_val, 
-                    data=df_scl.iloc[0].values, 
+                    values=sv, base_values=base_val, data=df_scl.iloc[0].values, 
                     feature_names=[c.split('(')[0] for c in cols]
                 )
-                
                 fig_shap, ax = plt.subplots(figsize=(5, 4))
                 shap.plots.waterfall(exp, max_display=5, show=False)
                 st.pyplot(fig_shap, bbox_inches='tight')
@@ -173,38 +158,46 @@ if page == "Individual Assessment":
         nlg = ClinicalReportGenerator(inputs, prob, THRESHOLD, sv, cols, base_val)
         full_report = nlg.generate_full_report()
         
-        c_rep1, c_rep2 = st.columns([3, 1])
-        with c_rep1:
-            with st.expander("📄 View AI Clinical Report", expanded=True):
-                st.markdown(full_report)
+        with st.expander("📄 View AI Clinical Report (Full Text)", expanded=True):
+            st.markdown(full_report)
         
-        with c_rep2:
-            st.markdown("<br>", unsafe_allow_html=True)
-            pdf_buffer = io.BytesIO()
-            pdf_engine = PDFReportEngine(
-                buffer=pdf_buffer,
-                patient_data=inputs,
-                predict_result={'prob': prob, 'threshold': THRESHOLD, 'risk_label': risk_label},
-                nlg_report=full_report
-            )
+        # --- 关键修改：布局调整与时区修正 ---
+        st.markdown("<br><br>", unsafe_allow_html=True) # 增加一些垂直间距
+        
+        # 1. 生成 PDF
+        pdf_buffer = io.BytesIO()
+        pdf_engine = PDFReportEngine(
+            buffer=pdf_buffer,
+            patient_data=inputs,
+            predict_result={'prob': prob, 'threshold': THRESHOLD, 'risk_label': risk_label},
+            nlg_report=full_report
+        )
+        
+        # 2. 获取北京时间字符串用于文件名
+        beijing_time = datetime.datetime.now() + datetime.timedelta(hours=8)
+        time_str = beijing_time.strftime("%Y%m%d_%H%M")
+        
+        # 3. 放在最底部居中位置
+        col_down1, col_down2, col_down3 = st.columns([1, 2, 1])
+        with col_down2:
             st.download_button(
-                label="📥 Download PDF",
+                label="📥 Download Official PDF Report",
                 data=pdf_engine.generate(),
-                file_name="MACE_Report.pdf",
+                file_name=f"Report_{inputs['SBP(mmHg)']}_{time_str}.pdf", # 文件名带上北京时间
                 mime="application/pdf",
-                use_container_width=True
+                use_container_width=True,
+                type="primary" # 突出显示为主按钮样式
             )
+        # --------------------------------
 
 # ----------------- PAGE 2: 批量处理 -----------------
 elif page == "Batch Cohort Analysis":
     st.title("📊 Retrospective Cohort Analysis")
     uploaded_file = st.file_uploader("Upload Dataset", type=['xlsx', 'csv'])
-    
     if uploaded_file:
         processor = BatchProcessor(model, scaler, imputer)
         if uploaded_file.name.endswith('.csv'): df_upload = pd.read_csv(uploaded_file)
         else: df_upload = pd.read_excel(uploaded_file)
-            
         st.write("Preview:", df_upload.head(3))
         if st.button("Start Batch Processing"):
             res_df, error = processor.process_data(df_upload)
@@ -219,15 +212,12 @@ elif page == "Clinical Dashboard":
     st.title("📈 Clinical Data Dashboard")
     analytics = AnalyticsEngine(db)
     df_hist = analytics.get_data()
-    
-    if df_hist.empty:
-        st.info("No data available.")
+    if df_hist.empty: st.info("No data available.")
     else:
         k1, k2, k3 = st.columns(3)
         k1.metric("Patients", len(df_hist))
         k2.metric("High Risk", f"{len(df_hist[df_hist['risk_label']=='High Risk'])}")
         k3.metric("Avg Prob", f"{df_hist['risk_prob'].mean():.1%}")
-        
         c1, c2 = st.columns(2)
         with c1: st.plotly_chart(analytics.plot_risk_distribution(), use_container_width=True)
         with c2: st.plotly_chart(analytics.plot_gender_stats(), use_container_width=True)
@@ -237,7 +227,6 @@ elif page == "System Documentation":
     st.markdown("### System Specifications")
     st.info("Architecture: Modular MVC (Streamlit + SQLite + ReportLab)")
 
-# --- 关键修改处：2026 年份更新 ---
 st.markdown("---")
 st.markdown("""
 <div style='text-align: center; color: #888; font-size: 0.8em;'>
@@ -245,4 +234,3 @@ st.markdown("""
     &copy; 2026 Medical Informatics Dept.
 </div>
 """, unsafe_allow_html=True)
-# -------------------------------
