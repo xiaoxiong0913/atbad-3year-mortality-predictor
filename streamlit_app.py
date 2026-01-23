@@ -7,7 +7,7 @@ import io
 import matplotlib.pyplot as plt
 import shap
 import plotly.graph_objects as go
-import datetime # 用于处理时间
+import datetime # 用于处理北京时间
 
 # ================= 1. 引用自定义模块 =================
 # 确保您的 GitHub 仓库中有 modules 文件夹，且包含这些文件
@@ -68,7 +68,7 @@ THRESHOLD = 0.193
 # ================= 4. 侧边栏导航 =================
 with st.sidebar:
     st.title("🩺 DR-MACE System")
-    st.caption("ver 2.0.3 | Enterprise Edition")
+    st.caption("ver 2.0.4 | Enterprise Edition")
     st.markdown("---")
     
     page = st.radio(
@@ -154,7 +154,7 @@ if page == "Individual Assessment":
                 explainer = shap.KernelExplainer(model.predict_proba, background)
                 shap_values = explainer.shap_values(df_scl, nsamples=100)
                 
-                # === SHAP 数据结构安全提取 ===
+                # === SHAP 数据结构安全提取 (Bug Fix) ===
                 if isinstance(shap_values, list): sv = shap_values[1][0]
                 elif len(np.array(shap_values).shape) == 3: sv = shap_values[0][:, 1]
                 else: sv = shap_values[0]
@@ -165,7 +165,7 @@ if page == "Individual Assessment":
                 else: base_val = ev
                 
                 if hasattr(base_val, 'item'): base_val = base_val.item()
-                # ============================
+                # ======================================
                 
                 exp = shap.Explanation(
                     values=sv, 
@@ -187,7 +187,7 @@ if page == "Individual Assessment":
         with st.expander("📄 View AI Clinical Report (Full Text)", expanded=True):
             st.markdown(full_report)
         
-        # --- PDF 下载区域 (布局修正) ---
+        # --- PDF 下载区域 (底部居中 + 北京时间) ---
         st.markdown("<br>", unsafe_allow_html=True)
         
         # 1. 生成 PDF 二进制流
@@ -215,7 +215,7 @@ if page == "Individual Assessment":
                 type="primary"
             )
 
-# ----------------- PAGE 2: 批量处理 (优化版) -----------------
+# ----------------- PAGE 2: 批量处理 (带模板下载) -----------------
 elif page == "Batch Cohort Analysis":
     st.title("📊 Retrospective Cohort Analysis")
     st.markdown("Upload a dataset to perform batch risk stratification.")
@@ -303,15 +303,45 @@ elif page == "Clinical Dashboard":
         
         st.plotly_chart(analytics.plot_temporal_trend(), use_container_width=True)
 
-# ----------------- PAGE 4: 系统文档 -----------------
+# ----------------- PAGE 4: 系统文档 (带说明书下载) -----------------
 elif page == "System Documentation":
     st.title("ℹ️ System Specifications")
+    
+    # 1. 架构说明
     st.info("Architecture: Modular MVC (Streamlit + SQLite + ReportLab)")
+    
     st.markdown("""
-    ### About
+    ### 📖 User Manual & Documentation
+    
     This system utilizes a Gaussian Naive Bayes classifier to predict 3-year MACE risk in DR patients.
     It features explainable AI (SHAP), batch processing capabilities, and automated reporting.
+    
+    #### How to use?
+    Please download the comprehensive bilingual user manual below for detailed instructions on:
+    * Individual Risk Assessment
+    * Batch Cohort Analysis
+    * Interpreting AI Reports
     """)
+    
+    st.divider()
+    
+    # 2. 说明书下载逻辑
+    BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+    # 必须确保你已经把 Word 文件上传到了 assets 文件夹
+    manual_path = os.path.join(BASE_DIR, "assets", "DR_MACE_User_Manual_Bilingual.docx")
+    
+    if os.path.exists(manual_path):
+        with open(manual_path, "rb") as f:
+            st.download_button(
+                label="📥 Download User Manual (En/Zh) .docx",
+                data=f,
+                file_name="DR_MACE_User_Manual_Bilingual.docx",
+                mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+                type="primary",
+                use_container_width=True
+            )
+    else:
+        st.warning("⚠️ User Manual file not found in 'assets/' folder. Please upload it to GitHub.")
 
 # --- 页脚 (2026 版) ---
 st.markdown("---")
