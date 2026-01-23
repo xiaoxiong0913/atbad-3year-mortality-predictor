@@ -145,29 +145,17 @@ if page == "Individual Assessment":
                 explainer = shap.KernelExplainer(model.predict_proba, background)
                 shap_values = explainer.shap_values(df_scl, nsamples=100)
                 
-                # === 🛠️ 关键修复：SHAP 数据结构处理 ===
-                # 1. 提取 SHAP 值 (sv)
-                if isinstance(shap_values, list):
-                    sv = shap_values[1][0]
-                elif len(np.array(shap_values).shape) == 3:
-                    sv = shap_values[0][:, 1]
-                else:
-                    sv = shap_values[0] # 兜底
+                # === SHAP 数据结构处理 ===
+                if isinstance(shap_values, list): sv = shap_values[1][0]
+                elif len(np.array(shap_values).shape) == 3: sv = shap_values[0][:, 1]
+                else: sv = shap_values[0]
 
-                # 2. 提取 Base Value (base_val)
-                # 必须先判断是否为数组且长度大于1，如果是，取索引1
                 ev = explainer.expected_value
-                if isinstance(ev, np.ndarray) and ev.size > 1:
-                    base_val = ev[1]
-                elif isinstance(ev, list):
-                    base_val = ev[1]
-                else:
-                    base_val = ev
+                if isinstance(ev, np.ndarray) and ev.size > 1: base_val = ev[1]
+                elif isinstance(ev, list): base_val = ev[1]
+                else: base_val = ev
                 
-                # 3. 最后再转标量，防止报错
-                if hasattr(base_val, 'item'):
-                    base_val = base_val.item()
-                # ====================================
+                if hasattr(base_val, 'item'): base_val = base_val.item()
                 
                 exp = shap.Explanation(
                     values=sv, 
@@ -248,3 +236,13 @@ elif page == "Clinical Dashboard":
 elif page == "System Documentation":
     st.markdown("### System Specifications")
     st.info("Architecture: Modular MVC (Streamlit + SQLite + ReportLab)")
+
+# --- 关键修改处：2026 年份更新 ---
+st.markdown("---")
+st.markdown("""
+<div style='text-align: center; color: #888; font-size: 0.8em;'>
+    Deployed by Yichang Central People's Hospital | Powered by AI & Clinical Evidence<br>
+    &copy; 2026 Medical Informatics Dept.
+</div>
+""", unsafe_allow_html=True)
+# -------------------------------
