@@ -1,19 +1,11 @@
-# 核心框架 (强制升级以修复 Altair 错误)
 streamlit>=1.40.0
-
-# 数据处理
 pandas>=2.0.0
 numpy>=1.24.0
-
-# 机器学习 (保持与您本地一致)
 scikit-learn>=1.5.2
 shap>=0.40.0
-
-# 可视化
 plotly>=5.0.0
 matplotlib>=3.7.0
 altair<6.0.0
-
-# 报告生成与工具
 reportlab>=4.0.0
 xlsxwriter>=3.0.0
+openpyxl>=3.1.0
