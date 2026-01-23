@@ -10,7 +10,6 @@ import plotly.graph_objects as go
 import datetime # 用于处理北京时间
 
 # ================= 1. 引用自定义模块 =================
-# 确保您的 GitHub 仓库中有 modules 文件夹，且包含这些文件
 from modules.database import PatientDatabase
 from modules.nlg_generator import ClinicalReportGenerator
 from modules.pdf_report import PDFReportEngine
@@ -31,7 +30,6 @@ def local_css(file_name):
         with open(file_name) as f:
             st.markdown(f'<style>{f.read()}</style>', unsafe_allow_html=True)
     except FileNotFoundError:
-        # 兜底样式，防止 CSS 文件丢失导致页面丑陋
         st.markdown("""
         <style>
             .protocol-card { padding: 15px; border-radius: 8px; margin-bottom: 15px; background: white; box-shadow: 0 1px 3px rgba(0,0,0,0.1); }
@@ -42,7 +40,6 @@ def local_css(file_name):
         </style>
         """, unsafe_allow_html=True)
 
-# 指向 assets 文件夹加载 CSS
 local_css("assets/style.css")
 
 # ================= 3. 资源加载 =================
@@ -61,14 +58,14 @@ def load_system():
         return None, None, None
 
 model, scaler, imputer = load_system()
-db = PatientDatabase() # 初始化数据库连接
+db = PatientDatabase()
 
 THRESHOLD = 0.193
 
 # ================= 4. 侧边栏导航 =================
 with st.sidebar:
     st.title("🩺 DR-MACE System")
-    st.caption("ver 2.0.4 | Enterprise Edition")
+    st.caption("ver 2.0.5 | Enterprise Edition")
     st.markdown("---")
     
     page = st.radio(
@@ -86,7 +83,7 @@ with st.sidebar:
 
 # ================= 5. 页面路由逻辑 =================
 
-# ----------------- PAGE 1: 单例预测 -----------------
+# ----------------- PAGE 1: 单例预测 (UI 优化版) -----------------
 if page == "Individual Assessment":
     st.title("🏥 Individual Patient Assessment")
     
@@ -98,21 +95,31 @@ if page == "Individual Assessment":
         with col1:
             st.markdown("#### Demographics & Vitals")
             gender = st.radio("Gender", ["Male", "Female"], horizontal=True)
-            sbp = st.number_input("Systolic BP (mmHg)", 50, 250, 130)
+            # 简化标签，视觉更清爽
+            sbp = st.number_input("Systolic BP", 50, 250, 130) 
             t_wave = st.selectbox("ECG: T-Wave Abnormalities", [0, 1], format_func=lambda x: "Present" if x==1 else "Absent")
             
         with col2:
             st.markdown("#### Laboratory & Meds")
-            hgb = st.number_input("Hemoglobin (g/L)", 30, 250, 135)
-            bun = st.number_input("BUN (mmol/L)", 0.0, 100.0, 7.0, 0.1)
+            # 简化标签
+            hgb = st.number_input("Hemoglobin", 30, 250, 135)
+            bun = st.number_input("BUN", 0.0, 100.0, 7.0, 0.1)
             statins = st.selectbox("Statin Therapy", [0, 1], format_func=lambda x: "On Therapy" if x==1 else "Naive/None")
+        
+        # --- 单位统一说明 ---
+        st.caption("📏 Units Reference: SBP (mmHg) | Hemoglobin (g/L) | BUN (mmol/L)")
         
         submitted = st.form_submit_button("🚀 Run Risk Assessment")
 
     if submitted and model:
+        # 核心映射：将简洁的输入变量映射回模型所需的带单位特征名
         inputs = {
-            'BUN(mmol/L)': bun, 'SBP(mmHg)': sbp, 'HGB(g/L)': hgb,
-            'T wave  abnormalities': t_wave, 'Statins': statins, 'Gender': gender
+            'BUN(mmol/L)': bun,
+            'SBP(mmHg)': sbp,
+            'HGB(g/L)': hgb,
+            'T wave  abnormalities': t_wave,
+            'Statins': statins,
+            'Gender': gender
         }
         
         cols = ['BUN(mmol/L)', 'SBP(mmHg)', 'HGB(g/L)', 'T wave  abnormalities', 'Statins']
@@ -126,7 +133,6 @@ if page == "Individual Assessment":
             prob = model.predict_proba(df_scl)[:, 1][0]
             risk_label = "High Risk" if prob >= THRESHOLD else "Low Risk"
             
-            # 存入数据库
             db.add_record(inputs, prob, risk_label)
             
         except Exception as e:
@@ -154,7 +160,7 @@ if page == "Individual Assessment":
                 explainer = shap.KernelExplainer(model.predict_proba, background)
                 shap_values = explainer.shap_values(df_scl, nsamples=100)
                 
-                # === SHAP 数据结构安全提取 (Bug Fix) ===
+                # SHAP 兼容性处理
                 if isinstance(shap_values, list): sv = shap_values[1][0]
                 elif len(np.array(shap_values).shape) == 3: sv = shap_values[0][:, 1]
                 else: sv = shap_values[0]
@@ -165,7 +171,6 @@ if page == "Individual Assessment":
                 else: base_val = ev
                 
                 if hasattr(base_val, 'item'): base_val = base_val.item()
-                # ======================================
                 
                 exp = shap.Explanation(
                     values=sv, 
@@ -183,14 +188,12 @@ if page == "Individual Assessment":
         nlg = ClinicalReportGenerator(inputs, prob, THRESHOLD, sv, cols, base_val)
         full_report = nlg.generate_full_report()
         
-        # 显示文字报告
         with st.expander("📄 View AI Clinical Report (Full Text)", expanded=True):
             st.markdown(full_report)
         
-        # --- PDF 下载区域 (底部居中 + 北京时间) ---
+        # PDF 下载区域 (居中 + 北京时间)
         st.markdown("<br>", unsafe_allow_html=True)
         
-        # 1. 生成 PDF 二进制流
         pdf_buffer = io.BytesIO()
         pdf_engine = PDFReportEngine(
             buffer=pdf_buffer,
@@ -199,11 +202,9 @@ if page == "Individual Assessment":
             nlg_report=full_report
         )
         
-        # 2. 生成文件名 (北京时间)
         beijing_time = datetime.datetime.now() + datetime.timedelta(hours=8)
         time_str = beijing_time.strftime("%Y%m%d_%H%M")
         
-        # 3. 居中放置下载按钮
         col_down1, col_down2, col_down3 = st.columns([1, 2, 1])
         with col_down2:
             st.download_button(
@@ -215,12 +216,11 @@ if page == "Individual Assessment":
                 type="primary"
             )
 
-# ----------------- PAGE 2: 批量处理 (带模板下载) -----------------
+# ----------------- PAGE 2: 批量处理 -----------------
 elif page == "Batch Cohort Analysis":
     st.title("📊 Retrospective Cohort Analysis")
     st.markdown("Upload a dataset to perform batch risk stratification.")
 
-    # --- 数据格式说明与模板下载 ---
     with st.expander("📋 Data Formatting Requirements & Template", expanded=True):
         st.markdown("""
         **Required Columns (Case Sensitive):**
@@ -233,7 +233,6 @@ elif page == "Batch Cohort Analysis":
         | `Statins` | 0=No, 1=Yes | 1 |
         """)
         
-        # 生成模板
         template_df = pd.DataFrame(columns=[
             'Patient_ID', 'BUN(mmol/L)', 'SBP(mmHg)', 'HGB(g/L)', 
             'T wave  abnormalities', 'Statins'
@@ -247,7 +246,6 @@ elif page == "Batch Cohort Analysis":
             file_name="DR_MACE_Batch_Template.csv",
             mime="text/csv"
         )
-    # -----------------------------
 
     st.divider()
     uploaded_file = st.file_uploader("Upload Dataset", type=['xlsx', 'csv'])
@@ -260,7 +258,6 @@ elif page == "Batch Cohort Analysis":
             
             st.write("Data Preview:", df_upload.head(3))
             
-            # 校验
             required_cols = ['BUN(mmol/L)', 'SBP(mmHg)', 'HGB(g/L)', 'T wave  abnormalities', 'Statins']
             missing = [c for c in required_cols if c not in df_upload.columns]
             
@@ -307,7 +304,6 @@ elif page == "Clinical Dashboard":
 elif page == "System Documentation":
     st.title("ℹ️ System Specifications")
     
-    # 1. 架构说明
     st.info("Architecture: Modular MVC (Streamlit + SQLite + ReportLab)")
     
     st.markdown("""
@@ -325,9 +321,7 @@ elif page == "System Documentation":
     
     st.divider()
     
-    # 2. 说明书下载逻辑
     BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-    # 必须确保你已经把 Word 文件上传到了 assets 文件夹
     manual_path = os.path.join(BASE_DIR, "assets", "DR_MACE_User_Manual_Bilingual.docx")
     
     if os.path.exists(manual_path):
