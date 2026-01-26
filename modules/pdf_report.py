@@ -1,15 +1,4 @@
 # -*- coding: utf-8 -*-
-"""
-------------------------------------------------------------------------------
-  Module Name: Medical Report Rendering Engine (PDF)
-  Author:      System Architect
-  Description: 
-      This module provides a low-level rendering engine for generating high-fidelity
-      PDF medical reports. It utilizes the ReportLab Canvas API for pixel-perfect
-      layout control.
-------------------------------------------------------------------------------
-"""
-
 from reportlab.pdfgen import canvas
 from reportlab.lib.pagesizes import A4
 from reportlab.lib import colors
@@ -39,20 +28,16 @@ class PDFReportEngine:
         self.system_name = "DR-MACE Risk Stratification System v2.0"
 
     def _draw_header(self):
-        # Draw Top Bar
         self.c.setFillColor(colors.HexColor("#003366"))
         self.c.rect(0, self.height - 30*mm, self.width, 30*mm, fill=1, stroke=0)
         
-        # Draw Title
         self.c.setFillColor(colors.white)
-        self.c.setFont("Helvetica-Bold", 18)
+        self.c.setFont("Times-Bold", 18) # 使用 Times 字体
         self.c.drawString(self.margin, self.height - 15*mm, "Clinical Risk Assessment Report")
         
-        # Draw Subtitle
-        self.c.setFont("Helvetica", 10)
+        self.c.setFont("Times-Roman", 10)
         self.c.drawString(self.margin, self.height - 22*mm, f"{self.hospital_name} | {self.system_name}")
         
-        # Draw Timestamp
         now = datetime.datetime.now().strftime("%Y-%m-%d %H:%M")
         self.c.drawRightString(self.width - self.margin, self.height - 15*mm, f"Generated: {now}")
         
@@ -60,7 +45,7 @@ class PDFReportEngine:
 
     def _draw_patient_table(self):
         self.c.setFillColor(colors.black)
-        self.c.setFont("Helvetica-Bold", 12)
+        self.c.setFont("Times-Bold", 12)
         self.c.drawString(self.margin, self.y, "1. Patient Clinical Profile")
         self.y -= 5 * mm
         
@@ -68,16 +53,17 @@ class PDFReportEngine:
         row_height = 8 * mm
         start_y = self.y
         
+        # --- 关键修改：单位放入标签列，数值列只留数字 ---
         rows = [
             ("Gender", self.data.get('Gender', 'N/A')),
-            ("Systolic BP", f"{self.data.get('SBP(mmHg)', 0)} mmHg"),
-            ("Hemoglobin (HGB)", f"{self.data.get('HGB(g/L)', 0)} g/L"),
-            ("Blood Urea Nitrogen", f"{self.data.get('BUN(mmol/L)', 0)} mmol/L"),
+            ("Systolic BP (mmHg)", f"{self.data.get('SBP(mmHg)', 0)}"),  # 纯数字
+            ("Hemoglobin (g/L)", f"{self.data.get('HGB(g/L)', 0)}"),     # 纯数字
+            ("BUN (mmol/L)", f"{self.data.get('BUN(mmol/L)', 0)}"),      # 纯数字
             ("ECG Findings", "Abnormal" if self.data.get('T wave  abnormalities')==1 else "Normal"),
             ("Statin Therapy", "Yes" if self.data.get('Statins')==1 else "No")
         ]
         
-        self.c.setFont("Helvetica", 10)
+        self.c.setFont("Times-Roman", 10)
         self.c.setLineWidth(0.5)
         self.c.setStrokeColor(colors.grey)
         
@@ -88,16 +74,20 @@ class PDFReportEngine:
                 self.c.rect(self.margin, current_y - row_height + 2*mm, self.width - 2*self.margin, row_height, fill=1, stroke=0)
             
             self.c.setFillColor(colors.black)
-            self.c.setFont("Helvetica-Bold", 10)
+            # 标签列（左对齐）
+            self.c.setFont("Times-Bold", 10)
             self.c.drawString(self.margin + 5*mm, current_y, label)
-            self.c.setFont("Helvetica", 10)
+            
+            # 数值列（左对齐，但因为是纯数字会很整齐）
+            self.c.setFont("Times-Roman", 10)
             self.c.drawString(self.margin + col_width, current_y, str(val))
+            
             self.c.line(self.margin, current_y - 2*mm, self.width - self.margin, current_y - 2*mm)
             
         self.y = start_y - (len(rows) * row_height) - 10*mm
 
     def _draw_risk_gauge(self):
-        self.c.setFont("Helvetica-Bold", 12)
+        self.c.setFont("Times-Bold", 12)
         self.c.drawString(self.margin, self.y, "2. MACE Risk Stratification")
         self.y -= 10 * mm
         
@@ -122,7 +112,7 @@ class PDFReportEngine:
         self.c.drawString(thresh_x - 10*mm, self.y + bar_height + 3*mm, f"Threshold {threshold}")
         
         self.y -= 8 * mm
-        self.c.setFont("Helvetica-Bold", 14)
+        self.c.setFont("Times-Bold", 14)
         self.c.setFillColor(fill_color)
         self.c.drawString(self.margin, self.y, f"Predicted Probability: {prob:.1%}")
         self.c.drawRightString(self.width - self.margin, self.y, f"Classification: {self.res['risk_label']}")
@@ -131,15 +121,15 @@ class PDFReportEngine:
 
     def _draw_narrative(self):
         self.c.setFillColor(colors.black)
-        self.c.setFont("Helvetica-Bold", 12)
+        self.c.setFont("Times-Bold", 12)
         self.c.drawString(self.margin, self.y, "3. AI-Generated Clinical Analysis")
         self.y -= 8 * mm
         
-        self.c.setFont("Helvetica", 10)
+        self.c.setFont("Times-Roman", 10)
         line_height = 5 * mm
         max_width = 90
         
-        clean_text = self.text.replace("### ", "").replace("**", "")
+        clean_text = self.text.replace("### ", "").replace("**", "").replace("#### ", "")
         
         lines = []
         for paragraph in clean_text.split('\n'):
@@ -154,22 +144,17 @@ class PDFReportEngine:
                 self.c.showPage()
                 self._draw_header()
                 self.y = self.height - 50*mm
-                self.c.setFont("Helvetica", 10)
+                self.c.setFont("Times-Roman", 10)
             
             self.c.drawString(self.margin, self.y, line)
             self.y -= line_height
 
     def _draw_footer(self):
-        """
-        Updated Footer with 2026 Copyright and 'For Reference Only'
-        """
         self.c.saveState()
-        self.c.setFont("Helvetica-Oblique", 8)
+        self.c.setFont("Times-Italic", 8)
         self.c.setFillColor(colors.grey)
         
-        # --- 关键修改处 ---
         footer_text = "For Reference Only. Not for primary diagnosis. (C) 2026 Yichang Central People's Hospital."
-        # ----------------
         
         self.c.drawCentredString(self.width / 2, 10*mm, footer_text)
         self.c.restoreState()
