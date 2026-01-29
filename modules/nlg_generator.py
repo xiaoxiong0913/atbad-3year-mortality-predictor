@@ -59,7 +59,6 @@ class ClinicalReportGenerator:
         clean_shap_values = []
         for v in self.shap_values:
             if isinstance(v, (np.ndarray, list)):
-                # 尝试获取标量值
                 if hasattr(v, 'item'): 
                      clean_shap_values.append(v.item())
                 elif len(v) > 0:
@@ -111,17 +110,10 @@ class ClinicalReportGenerator:
         if hosp > self.rules['Hosp']['long']:
             advice.append(f"5. **Recovery**: Prolonged hospitalization ({hosp} days). Assess for nosocomial complications and rehabilitation needs.")
 
-        # === 修改点：高危提示 ===
-        # 使用 HTML span 标签控制颜色为红色 (#dc3545)，加粗，但字号保持默认 (不使用标题)
+        # === 恢复：高危提示 (仅在报告中显示) ===
         if self.prob >= self.threshold:
             advice.append("---")
-            alert_text = (
-                "<span style='color: #dc3545; font-weight: bold; font-size: 16px;'>"
-                "⚠️ High Risk Alert: This patient is in the high-risk group for 3-year mortality. "
-                "Consider closer surveillance (CTA every 3-6 months) and aggressive risk factor modification."
-                "</span>"
-            )
-            advice.append(alert_text)
+            advice.append(f"<span style='color: #dc3545; font-weight: bold; font-size: 16px;'>⚠️ High Risk Alert: This patient is in the high-risk group for 3-year mortality. Consider closer surveillance (CTA every 3-6 months) and aggressive risk factor modification.</span>")
             
         return "\n\n".join(advice)
 
