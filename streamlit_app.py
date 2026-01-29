@@ -47,12 +47,13 @@ def local_css(file_name):
             box-shadow: 0 2px 5px rgba(0,0,0,0.05);
             margin-bottom: 20px;
         }
-        /* 按钮样式 */
+        /* 按钮样式优化：全宽、加粗 */
         .stButton>button {
             width: 100%;
             height: 3.5em;
             font-weight: bold;
-            font-size: 1.1rem;
+            font-size: 1.2rem;
+            margin-top: 10px;
         }
         /* 输入框标签 */
         .stNumberInput label, .stSelectbox label {
@@ -132,9 +133,10 @@ if page == "Risk Assessment":
             chd = st.selectbox("Coronary Heart Disease", [0, 1], format_func=lambda x: "Yes" if x==1 else "No")
         with c3:
             renal = st.selectbox("Renal Dysfunction", [0, 1], format_func=lambda x: "Yes" if x==1 else "No")
-            st.write("") 
-            st.write("") 
-            submitted = st.form_submit_button("CALCULATE RISK", type="primary")
+        
+        # === 按钮位置优化：移出列布局，单独一行全宽 ===
+        st.markdown("<br>", unsafe_allow_html=True)
+        submitted = st.form_submit_button("CALCULATE RISK", type="primary")
 
     if submitted and model:
         cols = ['age', 'HR', 'BUN', 'coronary heart disease', 'HGB', 'hospitalization', 'renal dysfunction']
@@ -178,68 +180,43 @@ if page == "Risk Assessment":
             fig.update_layout(height=300, margin=dict(l=20,r=20,t=50,b=20))
             st.plotly_chart(fig, use_container_width=True)
 
-        # === 森林图风格的双向条形图 ===
+        # === SHAP 瀑布图 (Waterfall) 终极修复版 ===
         sv_clean = np.zeros(7)
         with res_c2:
-            st.markdown("**Feature Impact Analysis**")
+            st.markdown("**Feature Impact Analysis (SHAP)**")
             with st.spinner("Analyzing..."):
                 try:
                     background = shap.kmeans(scaler.mean_.reshape(1, -1), 1) 
                     explainer = shap.KernelExplainer(model.predict_proba, background)
                     shap_values = explainer.shap_values(X_scl, nsamples=50)
                     
-                    # 1. 暴力清洗
+                    # 1. 暴力展平清洗
                     flat_vals = np.array(shap_values).flatten()
                     if len(flat_vals) == 14: sv_clean = flat_vals[7:] 
                     elif len(flat_vals) == 7: sv_clean = flat_vals
                     else: sv_clean = flat_vals[:7] if len(flat_vals) >= 7 else np.zeros(7)
                     
-                    sv_clean = np.array([float(x) for x in sv_clean])
-
-                    # 2. 构造数据
-                    df_shap = pd.DataFrame({
-                        'Feature': [c.split('(')[0] for c in cols],
-                        'Impact': sv_clean
-                    })
-                    # 按绝对值排序
-                    df_shap['Abs'] = df_shap['Impact'].abs()
-                    df_shap = df_shap.sort_values('Abs', ascending=True)
-
-                    # 3. 绘图 (Plotly Bar Chart - Forest Plot Style)
-                    fig_bar = go.Figure()
+                    # 2. 构造 Explanation 对象 (这是画 Waterfall 的关键)
+                    # 必须确保 values 是一维数组，base_values 是标量
                     
-                    # 添加条形
-                    fig_bar.add_trace(go.Bar(
-                        y=df_shap['Feature'],
-                        x=df_shap['Impact'],
-                        orientation='h',
-                        marker=dict(
-                            color=df_shap['Impact'],
-                            colorscale=['#1f77b4', '#d3d3d3', '#dc3545'], # 蓝 -> 灰 -> 红
-                            cmid=0, # 0为中心点
-                            showscale=False
-                        ),
-                        text=df_shap['Impact'].apply(lambda x: f"{x:+.3f}"), # 显示数值
-                        textposition='auto'
-                    ))
-
-                    # 布局美化
-                    fig_bar.update_layout(
-                        height=400,
-                        margin=dict(l=0, r=0, t=30, b=20),
-                        xaxis=dict(
-                            title="Impact on Risk (SHAP Value)",
-                            zeroline=True,
-                            zerolinewidth=2,
-                            zerolinecolor='black', # 明显的 0 轴线
-                            showgrid=True,
-                            gridcolor='#eee'
-                        ),
-                        yaxis=dict(showgrid=False),
-                        plot_bgcolor='rgba(0,0,0,0)'
+                    # 提取 base_value (expected value)
+                    base_val = explainer.expected_value
+                    if isinstance(base_val, (list, np.ndarray)):
+                        base_val = base_val[1] if len(base_val) > 1 else base_val[0]
+                    
+                    # 构造对象
+                    exp = shap.Explanation(
+                        values=np.array(sv_clean), 
+                        base_values=float(base_val), 
+                        data=df_raw.iloc[0].values, 
+                        feature_names=cols
                     )
                     
-                    st.plotly_chart(fig_bar, use_container_width=True)
+                    # 3. 绘图
+                    fig_shap, ax = plt.subplots(figsize=(6, 5))
+                    shap.plots.waterfall(exp, max_display=7, show=False)
+                    st.pyplot(fig_shap, bbox_inches='tight')
+                    plt.clf()
 
                 except Exception as shap_err:
                     st.warning(f"Feature Analysis Unavailable: {shap_err}")
