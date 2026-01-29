@@ -104,55 +104,49 @@ with st.sidebar:
 
 # ----------------- PAGE 1: 风险评估 -----------------
 if page == "Risk Assessment":
-    st.title("Individual Risk Assessment")
-    st.markdown("---")
-
-    # === 布局核心：左侧 (2) 表单，右侧 (1) 简介 ===
-    col_left, col_right = st.columns([2, 1])
     
-    # --- 左侧：输入表单 ---
-    with col_left:
-        st.markdown("##### Patient Clinical Data")
-        with st.form("input_form_atbad"):
-            # 内部再分3列
-            c1, c2, c3 = st.columns(3)
-            
-            # 第一列
-            with c1:
-                age = st.number_input("Age (years)", 20, 100, 60)
-                hr = st.number_input("Heart Rate (bpm)", 30, 180, 80)
-                hosp = st.number_input("Hospitalization (days)", 1, 100, 10)
-                
-            # 第二列
-            with c2:
-                bun = st.number_input("BUN (mmol/L)", 0.1, 100.0, 7.0, 0.1)
-                hgb = st.number_input("Hemoglobin (g/L)", 30, 250, 130)
-                st.write("") 
-                
-            # 第三列 (单独放 CHD 和 Renal)
-            with c3:
-                chd = st.selectbox("Coronary Heart Disease", [0, 1], format_func=lambda x: "Yes" if x==1 else "No")
-                renal = st.selectbox("Renal Dysfunction", [0, 1], format_func=lambda x: "Yes" if x==1 else "No")
-            
-            # 按钮 (在表单内底部)
-            st.markdown("<br>", unsafe_allow_html=True)
-            submitted = st.form_submit_button("CALCULATE RISK", type="primary")
+    # 1. 顶部 Model Overview
+    st.markdown(f"""
+    <div class='overview-card'>
+        <h3 style='margin-bottom:10px; margin-top:0;'>3-Year Mortality Prediction for Acute Type B Aortic Dissection</h3>
+        <h4 style='margin-bottom:10px; color:#555;'>Model Overview</h4>
+        <p style='font-size:16px; line-height:1.5;'>
+            This predictive tool uses an SVM machine learning model to estimate 3-year mortality risk in patients with acute Type B aortic dissection.<br>
+            - AUC: <b>0.94</b><br>
+            - Accuracy: <b>88.8%</b><br>
+            - Risk Threshold: <b>{THRESHOLD}</b> (Probabilities ≥ {THRESHOLD:.1%} are classified as High Risk)
+        </p>
+    </div>
+    """, unsafe_allow_html=True)
 
-    # --- 右侧：Model Overview 卡片 ---
-    with col_right:
-        st.markdown(f"""
-        <div class='overview-card'>
-            <h3 style='margin-bottom:15px; margin-top:0; font-size:1.4rem;'>3-Year Mortality Prediction</h3>
-            <h4 style='margin-bottom:10px; color:#555; font-size:1.1rem;'>Model Overview</h4>
-            <p style='font-size:15px; line-height:1.6;'>
-                This predictive tool uses an <b>SVM machine learning model</b> to estimate 3-year mortality risk in patients with acute Type B aortic dissection.<br><br>
-                <b>Performance:</b><br>
-                - AUC: <b>0.94</b><br>
-                - Accuracy: <b>88.8%</b><br>
-                - Risk Threshold: <b>{THRESHOLD}</b>
-            </p>
-        </div>
-        """, unsafe_allow_html=True)
+    # 2. 输入表单 (重点修改区域)
+    st.markdown("##### Patient Clinical Data")
+    with st.form("input_form_atbad"):
+        # 第一行：3个基础数值指标
+        c1, c2, c3 = st.columns(3)
+        with c1: age = st.number_input("Age (years)", 20, 100, 60)
+        with c2: hr = st.number_input("Heart Rate (bpm)", 30, 180, 80)
+        with c3: hosp = st.number_input("Hospitalization (days)", 1, 100, 10)
+            
+        # 第二行：2个实验室数值指标 (居中分布，稍微留白)
+        c4, c5, c6 = st.columns(3)
+        with c4: bun = st.number_input("BUN (mmol/L)", 0.1, 100.0, 7.0, 0.1)
+        with c5: hgb = st.number_input("Hemoglobin (g/L)", 30, 250, 130)
+        with c6: st.write("") # 占位
+            
+        # 第三行：2个分类变量 (您要求的：单独放在第三列/行区域)
+        st.markdown("<br>", unsafe_allow_html=True) # 加点间距
+        st.markdown("**Comorbidities & History**")
+        c7, c8, c9 = st.columns(3)
+        with c7: 
+            chd = st.selectbox("Coronary Heart Disease", [0, 1], format_func=lambda x: "Yes" if x==1 else "No")
+        with c8: 
+            renal = st.selectbox("Renal Dysfunction", [0, 1], format_func=lambda x: "Yes" if x==1 else "No")
+        with c9: 
+            st.write("") # 占位
+        
+        st.markdown("<br>", unsafe_allow_html=True)
+        submitted = st.form_submit_button("CALCULATE RISK", type="primary")
 
     if submitted and model:
         # 特征映射
@@ -179,7 +173,17 @@ if page == "Risk Assessment":
         st.divider()
         st.subheader("Prediction Results")
         
-        # [已删除] 这里的红色高危弹窗代码已被移除，界面更清爽
+        # === 结果展示 (如果有高危，显示红色提示框 - 修正版) ===
+        if prob >= THRESHOLD:
+            # 适当的红色，字号适中 (16px)，加粗
+            st.markdown(f"""
+            <div style='background-color: #fff5f5; border: 1px solid #fc8181; border-left: 5px solid #e53e3e; padding: 15px; border-radius: 4px; margin-bottom: 20px;'>
+                <p style='color: #c53030; font-weight: 600; font-size: 16px; margin: 0;'>
+                    ⚠️ High Risk Alert: This patient is in the high-risk group for 3-year mortality. 
+                    Consider closer surveillance (CTA every 3-6 months) and aggressive risk factor modification.
+                </p>
+            </div>
+            """, unsafe_allow_html=True)
 
         res_c1, res_c2 = st.columns([1, 1])
         
@@ -310,18 +314,4 @@ elif page == "Project Introduction":
     st.title("ATBAD Mortality Prediction Model")
     st.markdown("""
     ### Abstract
-    **Objective:** To develop accurate machine learning models for predicting three-year mortality in patients with Acute Type B Aortic Dissection (ATBAD).
-    
-    **Methods:** This study enrolled patients from Yichang Central People's Hospital. A **Support Vector Machine (SVM)** classifier was identified as the optimal model (AUC 0.94).
-    
-    **Key Predictors:** Age, Heart Rate, BUN, Coronary Heart Disease, Hemoglobin, Hospitalization, Renal Dysfunction.
-    """)
-    
-    manual_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "assets", "ATBAD_User_Manual.docx")
-    if os.path.exists(manual_path):
-        with open(manual_path, "rb") as f:
-            st.download_button("Download User Manual", f, "ATBAD_User_Manual.docx")
-
-# --- Footer ---
-st.markdown("---")
-st.markdown("<div style='text-align: center; color: #888; font-size: 0.8em;'>Copyright &copy; 2026 Yichang Central People's Hospital.</div>", unsafe_allow_html=True)
+    **Objective:** To develop accurate machine learning models for predicting three-year mortality in
