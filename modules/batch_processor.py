@@ -27,17 +27,17 @@ class BatchProcessor:
                 X_imp = self.imputer.transform(X_raw)
                 X_scl = self.scaler.transform(X_imp)
             else:
-                # 兼容旧逻辑：直接 scale
+                # 兼容 SVM：直接 scale
                 X_scl = self.scaler.transform(X_raw)
             
-            # 4. 预测
-            # 注意：SVM 的 predict_proba
+            # 4. 预测 (SVM predict_proba)
+            # 注意: 部分 SVM 模型如果训练时没开 probability=True，这里会报错
+            # 如果报错，请通知我改为 decision_function
             probs = self.model.predict_proba(X_scl)[:, 1]
             
             # 5. 拼接结果
             res_df = df.copy()
             res_df['Mortality_Risk_Prob'] = probs
-            # 假设阈值 0.5 (如果不知，暂时设0.5，后面 UI 里可以调)
             res_df['Risk_Level'] = res_df['Mortality_Risk_Prob'].apply(lambda x: "High Risk" if x >= 0.5 else "Low Risk")
             
             return res_df, None
