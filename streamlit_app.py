@@ -38,7 +38,7 @@ def local_css(file_name):
             font-family: 'Helvetica Neue', sans-serif;
             font-size: 18px; 
         }
-        /* 顶部 Overview 卡片 */
+        /* Overview 卡片 */
         .overview-card { 
             background-color: #f8f9fa; 
             padding: 20px; 
@@ -105,7 +105,7 @@ with st.sidebar:
 # ----------------- PAGE 1: 风险评估 -----------------
 if page == "Risk Assessment":
     
-    # 1. 顶部 Model Overview
+    # 1. 顶部 Model Overview (上下结构)
     st.markdown(f"""
     <div class='overview-card'>
         <h3 style='margin-bottom:10px; margin-top:0;'>3-Year Mortality Prediction for Acute Type B Aortic Dissection</h3>
@@ -119,27 +119,31 @@ if page == "Risk Assessment":
     </div>
     """, unsafe_allow_html=True)
 
-    # 2. 输入表单 (布局调整)
+    # 2. 输入表单 (您指定的布局：CHD 和 Renal 单独放)
     st.markdown("##### Patient Clinical Data")
     with st.form("input_form_atbad"):
-        # 3列布局
+        # 第一行：3个基础数值指标
         c1, c2, c3 = st.columns(3)
-        
-        # 第一列：基础指标
-        with c1:
-            age = st.number_input("Age (years)", 20, 100, 60)
-            hr = st.number_input("Heart Rate (bpm)", 30, 180, 80)
-            hosp = st.number_input("Hospitalization (days)", 1, 100, 10)
+        with c1: age = st.number_input("Age (years)", 20, 100, 60)
+        with c2: hr = st.number_input("Heart Rate (bpm)", 30, 180, 80)
+        with c3: hosp = st.number_input("Hospitalization (days)", 1, 100, 10)
             
-        # 第二列：实验室指标
-        with c2:
-            bun = st.number_input("BUN (mmol/L)", 0.1, 100.0, 7.0, 0.1)
-            hgb = st.number_input("Hemoglobin (g/L)", 30, 250, 130)
+        # 第二行：2个实验室数值指标 (居中分布)
+        c4, c5, c6 = st.columns(3)
+        with c4: bun = st.number_input("BUN (mmol/L)", 0.1, 100.0, 7.0, 0.1)
+        with c5: hgb = st.number_input("Hemoglobin (g/L)", 30, 250, 130)
+        with c6: st.write("") # 占位
             
-        # 第三列：并发症/分类变量 (单独)
-        with c3:
+        # 第三行：2个分类变量 (单独放在这里)
+        st.markdown("<br>", unsafe_allow_html=True) 
+        st.markdown("**Comorbidities & History**")
+        c7, c8, c9 = st.columns(3)
+        with c7: 
             chd = st.selectbox("Coronary Heart Disease", [0, 1], format_func=lambda x: "Yes" if x==1 else "No")
+        with c8: 
             renal = st.selectbox("Renal Dysfunction", [0, 1], format_func=lambda x: "Yes" if x==1 else "No")
+        with c9: 
+            st.write("") # 占位
         
         st.markdown("<br>", unsafe_allow_html=True)
         submitted = st.form_submit_button("CALCULATE RISK", type="primary")
@@ -169,16 +173,7 @@ if page == "Risk Assessment":
         st.divider()
         st.subheader("Prediction Results")
         
-        # === 结果展示 (如果有高危，显示红色提示框) ===
-        if prob >= THRESHOLD:
-            st.markdown(f"""
-            <div style='background-color: #f8d7da; border-left: 5px solid #dc3545; padding: 15px; border-radius: 5px; margin-bottom: 20px;'>
-                <p style='color: #dc3545; font-weight: bold; font-size: 16px; margin: 0;'>
-                    ⚠️ High Risk Alert: This patient is in the high-risk group for 3-year mortality. 
-                    Consider closer surveillance (CTA every 3-6 months) and aggressive risk factor modification.
-                </p>
-            </div>
-            """, unsafe_allow_html=True)
+        # [已删除] 红色高危弹窗已移除
 
         res_c1, res_c2 = st.columns([1, 1])
         
@@ -198,7 +193,7 @@ if page == "Risk Assessment":
             fig.update_layout(height=300, margin=dict(l=20,r=20,t=50,b=20))
             st.plotly_chart(fig, use_container_width=True)
 
-        # === 棒棒糖图 (Lollipop Chart) ===
+        # === SHAP 瀑布图 (Waterfall) ===
         sv_clean = np.zeros(7)
         with res_c2:
             st.markdown("**Feature Impact Analysis (SHAP)**")
@@ -208,49 +203,29 @@ if page == "Risk Assessment":
                     explainer = shap.KernelExplainer(model.predict_proba, background)
                     shap_values = explainer.shap_values(X_scl, nsamples=50)
                     
+                    # 1. 暴力清洗
                     flat_vals = np.array(shap_values).flatten()
                     if len(flat_vals) == 14: sv_clean = flat_vals[7:] 
                     elif len(flat_vals) == 7: sv_clean = flat_vals
                     else: sv_clean = flat_vals[:7] if len(flat_vals) >= 7 else np.zeros(7)
                     
-                    sv_clean = np.array([float(x) for x in sv_clean])
-
-                    df_shap = pd.DataFrame({
-                        'Feature': [c.split('(')[0] for c in cols],
-                        'Impact': sv_clean
-                    })
-                    df_shap['Abs'] = df_shap['Impact'].abs()
-                    df_shap = df_shap.sort_values('Abs', ascending=True)
-                    df_shap['Color'] = ['#FF4B4B' if x > 0 else '#1F77B4' for x in df_shap['Impact']]
-
-                    fig_lolly = go.Figure()
-                    for index, row in df_shap.iterrows():
-                        fig_lolly.add_shape(
-                            type='line',
-                            x0=0, y0=row['Feature'],
-                            x1=row['Impact'], y1=row['Feature'],
-                            line=dict(color='gray', width=1)
-                        )
-
-                    fig_lolly.add_trace(go.Scatter(
-                        x=df_shap['Impact'],
-                        y=df_shap['Feature'],
-                        mode='markers',
-                        marker=dict(color=df_shap['Color'], size=12),
-                        name='Impact',
-                        showlegend=False,
-                        hovertemplate='<b>%{y}</b><br>Impact: %{x:.4f}<extra></extra>'
-                    ))
-
-                    fig_lolly.update_layout(
-                        height=400,
-                        margin=dict(l=0, r=0, t=20, b=20),
-                        xaxis=dict(title="Impact on Risk Probability", zeroline=True, zerolinewidth=2, zerolinecolor='black'),
-                        yaxis=dict(showgrid=False),
-                        plot_bgcolor='rgba(0,0,0,0)'
+                    # 2. 构造 Explanation 对象 (画瀑布图必须)
+                    base_val = explainer.expected_value
+                    if isinstance(base_val, (list, np.ndarray)):
+                        base_val = base_val[1] if len(base_val) > 1 else base_val[0]
+                    
+                    exp = shap.Explanation(
+                        values=np.array(sv_clean), 
+                        base_values=float(base_val), 
+                        data=df_raw.iloc[0].values, 
+                        feature_names=cols
                     )
-
-                    st.plotly_chart(fig_lolly, use_container_width=True)
+                    
+                    # 3. 绘图
+                    fig_shap, ax = plt.subplots(figsize=(6, 5))
+                    shap.plots.waterfall(exp, max_display=7, show=False)
+                    st.pyplot(fig_shap, bbox_inches='tight')
+                    plt.clf()
 
                 except Exception as shap_err:
                     st.warning(f"Feature Analysis Unavailable: {shap_err}")
