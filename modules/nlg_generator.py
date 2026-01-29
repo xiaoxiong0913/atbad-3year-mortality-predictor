@@ -14,16 +14,16 @@ class ClinicalReportGenerator:
         self.feature_names = feature_names
         self.base_value = base_value
         
-        # 医学参考范围 (参考旧版代码)
+        # ATBAD 临床参考阈值
         self.rules = {
             'BUN': {'high': 8.0, 'unit': 'mmol/L'},  # 正常上限约 7.1-8.0
             'HGB': {'low': 120, 'unit': 'g/L'},
-            'HR': {'tachy': 100, 'unit': 'bpm'},
+            'HR': {'tachy': 100, 'brady': 60, 'unit': 'bpm'},
             'Hosp': {'long': 14, 'unit': 'days'}
         }
 
     def _get_risk_level_desc(self):
-        # 根据阈值判断风险等级
+        # 风险等级描述
         if self.prob < self.threshold * 0.5: return "Very Low Risk"
         elif self.prob < self.threshold: return "Low Risk"
         elif self.prob < self.threshold * 1.5: return "Moderate Risk"
@@ -31,7 +31,7 @@ class ClinicalReportGenerator:
 
     def _format_patient_info(self):
         """
-        ATBAD Patient Profile Table
+        生成 ATBAD 患者信息表格 (Markdown)
         """
         age = self.data.get('age', 0)
         hr = self.data.get('HR', 0)
@@ -39,7 +39,7 @@ class ClinicalReportGenerator:
         hgb = self.data.get('HGB', 0)
         hosp = self.data.get('hospitalization', 0)
         
-        # 处理二分类变量 (0/1 -> Yes/No)
+        # 二分类变量转换
         chd = "Yes" if self.data.get('coronary heart disease') == 1 else "No"
         renal = "Yes" if self.data.get('renal dysfunction') == 1 else "No"
         
@@ -57,10 +57,9 @@ class ClinicalReportGenerator:
         return table
 
     def _analyze_shap_impact(self):
-        # SHAP 分析文本生成
+        # SHAP 归因分析
         narratives = []
         feature_impacts = zip(self.feature_names, self.shap_values)
-        # 按绝对值排序
         sorted_features = sorted(feature_impacts, key=lambda x: abs(x[1]), reverse=True)
         
         narratives.append("#### 🧠 AI Risk Factor Analysis")
@@ -68,7 +67,7 @@ class ClinicalReportGenerator:
         
         for name, val in sorted_features[:3]:
             impact_type = "increased ⬆️" if val > 0 else "decreased ⬇️"
-            # 清洗特征名 (去掉可能的单位后缀)
+            # 清洗特征名，只保留核心名称
             clean_name = name.split('(')[0].strip()
             narratives.append(f"- **{clean_name}** has {impact_type} the estimated risk (Impact score: `{val:+.3f}`).")
             
@@ -76,18 +75,24 @@ class ClinicalReportGenerator:
 
     def _generate_clinical_advice(self):
         """
-        基于 ATBAD 指南的个性化建议
+        生成个性化临床建议
         """
         advice = []
         advice.append("#### 🩺 Clinical Management Recommendations")
         
-        # 1. 基础管理
-        advice.append("1. **General Targets**: Strict BP control (SBP <120 mmHg) and HR control (<60-70 bpm) are fundamental.")
+        # 1. 基础管理 (血压/心率)
+        hr = self.data.get('HR', 0)
+        if hr > self.rules['HR']['tachy']:
+            advice.append(f"1. **Hemodynamics**: Tachycardia ({hr} bpm) detected. Aggressive rate control (Beta-blockers) is recommended to reduce aortic wall stress.")
+        elif hr < self.rules['HR']['brady']:
+            advice.append(f"1. **Hemodynamics**: Bradycardia ({hr} bpm) detected. Monitor for perfusion and adjust AV-nodal blocking agents if necessary.")
+        else:
+            advice.append("1. **Hemodynamics**: Heart rate within target range. Maintain strict BP control (SBP <120 mmHg).")
 
         # 2. 冠心病逻辑
         chd = self.data.get('coronary heart disease', 0)
         if chd == 1:
-            advice.append("2. **Comorbidity Management (CHD)**: Patient has Coronary Heart Disease. Optimize antiplatelet therapy and statins. Evaluate for revascularization if symptomatic.")
+            advice.append("2. **Comorbidity (CHD)**: Patient has Coronary Heart Disease. Optimize antiplatelet therapy and statins. Evaluate for revascularization if symptomatic.")
         
         # 3. 肾功能逻辑
         renal = self.data.get('renal dysfunction', 0)
@@ -98,12 +103,12 @@ class ClinicalReportGenerator:
         # 4. 贫血/血红蛋白
         hgb = self.data.get('HGB', 0)
         if hgb < self.rules['HGB']['low']:
-            advice.append(f"4. **Hematology**: Low HGB ({hgb} g/L). Investigate for blood loss or chronic anemia, which may worsen prognosis.")
+            advice.append(f"4. **Hematology**: Low HGB ({hgb} g/L). Investigate for blood loss (dissection extension/rupture) or chronic anemia.")
         
-        # 5. 住院时长逻辑
+        # 5. 住院时长
         hosp = self.data.get('hospitalization', 0)
         if hosp > self.rules['Hosp']['long']:
-            advice.append(f"5. **Recovery**: Prolonged hospitalization ({hosp} days). Assess for nosocomial complications and need for comprehensive rehabilitation.")
+            advice.append(f"5. **Recovery**: Prolonged hospitalization ({hosp} days). Assess for nosocomial complications and rehabilitation needs.")
 
         # 高危特别提示
         if self.prob >= self.threshold:
