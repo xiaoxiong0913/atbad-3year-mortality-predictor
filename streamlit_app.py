@@ -18,109 +18,147 @@ from modules.analytics import AnalyticsEngine
 
 # ================= 2. 系统初始化与配置 =================
 st.set_page_config(
-    page_title="ATBAD Mortality Risk Predictor",
-    page_icon="❤️",
+    page_title="ATBAD Mortality Risk Prediction Model",
     layout="wide",
     initial_sidebar_state="expanded"
 )
 
-# 加载外部 CSS
+# 加载外部 CSS (保持专业简洁，去除了图标样式)
 def local_css(file_name):
     try:
         with open(file_name) as f:
             st.markdown(f'<style>{f.read()}</style>', unsafe_allow_html=True)
     except FileNotFoundError:
-        # 兜底样式
         st.markdown("""
         <style>
-            .protocol-card { padding: 15px; border-radius: 8px; margin-bottom: 15px; background: white; box-shadow: 0 1px 3px rgba(0,0,0,0.1); }
-            .info-card { border-left: 5px solid #17a2b8; }
+            .protocol-card { padding: 15px; border-radius: 4px; margin-bottom: 15px; background: #f8f9fa; border: 1px solid #dee2e6; }
+            .info-card { border-left: 5px solid #004085; background-color: #cce5ff; color: #004085; padding: 10px; }
+            .header-text { font-family: 'Times New Roman', serif; }
         </style>
         """, unsafe_allow_html=True)
 
 local_css("assets/style.css")
 
-# ================= 3. 资源加载 (SVM 版) =================
+# ================= 3. 资源加载 =================
 @st.cache_resource
 def load_system():
     BASE_DIR = os.path.dirname(os.path.abspath(__file__))
     ASSETS_DIR = os.path.join(BASE_DIR, "assets")
     
     try:
-        # 加载 SVM 模型和 Scaler
+        # 加载模型和Scaler
         with open(os.path.join(ASSETS_DIR, "svm_model.pkl"), 'rb') as f: model = pickle.load(f)
         with open(os.path.join(ASSETS_DIR, "scaler.pkl"), 'rb') as f: scaler = pickle.load(f)
         
-        # 检查是否有插补器 (ATBAD 项目通常不需要，但保留兼容性)
+        # 兼容性加载 imputer
         imputer = None
         if os.path.exists(os.path.join(ASSETS_DIR, "imputer.pkl")):
             with open(os.path.join(ASSETS_DIR, "imputer.pkl"), 'rb') as f: imputer = pickle.load(f)
             
         return model, scaler, imputer
     except Exception as e:
-        st.error(f"System Error: Failed to load core assets. {e}")
+        st.error(f"System Error: Failed to load core assets. Please verify 'assets/' folder content. {e}")
         return None, None, None
 
 model, scaler, imputer = load_system()
 db = PatientDatabase()
 
-# ATBAD 模型默认阈值
 THRESHOLD = 0.5 
 
 # ================= 4. 侧边栏导航 =================
 with st.sidebar:
-    st.title("❤️ ATBAD Predictor")
-    st.caption("ver 3.0.2 | SVM Powered")
-    st.markdown("---")
+    st.header("Navigation")
     
     page = st.radio(
-        "System Navigation", 
-        ["Individual Assessment", "Batch Analysis", "Clinical Dashboard", "System Documentation"],
+        "Go to", 
+        ["Project Introduction", "Risk Assessment", "Batch Analysis", "Clinical Dashboard"],
         index=0
     )
     
     st.markdown("---")
+    st.markdown("**System Status**")
     if model:
-        st.success("✅ SVM Model Online")
-        st.info("✅ Database Connected")
+        st.success("Model Loaded")
+        st.info("Database Connected")
     else:
-        st.error("❌ System Offline")
+        st.error("System Offline")
 
 # ================= 5. 页面路由逻辑 =================
 
-# ----------------- PAGE 1: 单例预测 (7 Variables) -----------------
-if page == "Individual Assessment":
-    st.title("🏥 Individual Risk Assessment")
+# ----------------- PAGE 0: 项目介绍 (恢复原版) -----------------
+if page == "Project Introduction":
+    st.title("Machine learning predictive model for three-year mortality in Acute Type B Aortic Dissection (ATBAD)")
     
-    with st.container():
-        st.markdown("<div class='protocol-card info-card'><b>Protocol Note:</b> Evaluates 3-year mortality risk for Acute Type B Aortic Dissection patients.</div>", unsafe_allow_html=True)
+    st.markdown("""
+    ### Abstract & Objective
+    **Objective:** To develop accurate machine learning models for predicting three-year mortality in patients with Acute Type B Aortic Dissection (ATBAD), addressing a critical clinical need for improved risk stratification.
+    
+    **Background:** ATBAD is a life-threatening cardiovascular emergency. While short-term outcomes have improved with TEVAR, long-term mortality remains significant. Identifying high-risk patients is essential for optimizing surveillance and management strategies.
+    
+    **Methods:** This study enrolled patients with ATBAD from Yichang Central People's Hospital. Comprehensive clinical features including demographics, vital signs, laboratory markers, and comorbidities were analyzed. 
+    
+    A **Support Vector Machine (SVM)** classifier was identified as the optimal model, demonstrating superior performance compared to Logistic Regression, Random Forest, and GBM in the validation cohort.
+    
+    ### Key Predictors
+    The model integrates the following key clinical variables:
+    * **Age:** Patient age at admission.
+    * **Heart Rate (HR):** Admission heart rate (bpm).
+    * **BUN:** Blood Urea Nitrogen levels (mmol/L).
+    * **Coronary Heart Disease:** History of CHD.
+    * **Hemoglobin (HGB):** Admission hemoglobin levels (g/L).
+    * **Hospitalization:** Length of hospital stay (days).
+    * **Renal Dysfunction:** History of renal impairment.
+
+    ---
+    *Disclaimer: This web-based calculator is intended for research and educational purposes only. It is not a substitute for professional clinical judgment or diagnosis.*
+    """)
+
+    # 说明书下载
+    st.markdown("### User Manual")
+    BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+    manual_path = os.path.join(BASE_DIR, "assets", "ATBAD_User_Manual.docx")
+    
+    if os.path.exists(manual_path):
+        with open(manual_path, "rb") as f:
+            st.download_button(
+                label="Download User Manual (.docx)",
+                data=f,
+                file_name="ATBAD_User_Manual.docx",
+                mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+            )
+
+# ----------------- PAGE 1: 单例预测 (学术风格) -----------------
+elif page == "Risk Assessment":
+    st.title("Individual Risk Assessment")
+    
+    st.markdown("<div class='protocol-card'><b>Protocol Note:</b> Please ensure all input values are collected at the time of admission or diagnosis.</div>", unsafe_allow_html=True)
 
     with st.form("input_form_atbad"):
         col1, col2 = st.columns(2)
         with col1:
-            st.markdown("#### Demographics & Vitals")
-            age = st.number_input("Age (years)", 20, 100, 60, key="input_age")
-            hr = st.number_input("Heart Rate (bpm)", 30, 180, 80, key="input_hr")
-            hosp = st.number_input("Hospitalization (days)", 1, 100, 10, key="input_hosp")
+            st.subheader("Demographics & Vitals")
+            age = st.number_input("Age (years)", 20, 100, 60)
+            hr = st.number_input("Heart Rate (bpm)", 30, 180, 80)
+            hosp = st.number_input("Hospitalization (days)", 1, 100, 10)
             
-            st.markdown("#### Comorbidities")
-            chd = st.selectbox("Coronary Heart Disease", [0, 1], format_func=lambda x: "Yes" if x==1 else "No", key="input_chd")
+            st.subheader("Comorbidities")
+            chd = st.selectbox("Coronary Heart Disease", [0, 1], format_func=lambda x: "Yes" if x==1 else "No")
             
         with col2:
-            st.markdown("#### Laboratory Markers")
-            bun = st.number_input("BUN", 1.0, 50.0, 7.0, 0.1, key="input_bun")
-            hgb = st.number_input("Hemoglobin", 50, 200, 130, key="input_hgb")
+            st.subheader("Laboratory Markers")
+            bun = st.number_input("BUN (mmol/L)", 0.1, 100.0, 7.0, 0.1)
+            hgb = st.number_input("Hemoglobin (g/L)", 30, 250, 130)
             
-            st.markdown("#### Renal Status")
-            renal = st.selectbox("Renal Dysfunction", [0, 1], format_func=lambda x: "Yes" if x==1 else "No", key="input_renal")
+            st.subheader("Renal Status")
+            renal = st.selectbox("Renal Dysfunction", [0, 1], format_func=lambda x: "Yes" if x==1 else "No")
         
-        # 底部单位说明
-        st.info("ℹ️ Units Reference: BUN in `mmol/L` | Hemoglobin in `g/L`")
-        
-        submitted = st.form_submit_button("🚀 Run Risk Prediction")
+        submitted = st.form_submit_button("Calculate Risk")
 
     if submitted and model:
-        # 构造输入字典 (Key 必须与 features.txt 完全一致)
+        # 严格按照 scaler.pkl 的特征顺序
+        # 根据您提供的 scaler.pkl 内容，特征列表为：
+        cols = ['age', 'HR', 'BUN', 'coronary heart disease', 'HGB', 'hospitalization', 'renal dysfunction']
+        
         inputs = {
             'age': age,
             'HR': hr,
@@ -131,8 +169,6 @@ if page == "Individual Assessment":
             'renal dysfunction': renal
         }
         
-        # 转换为 DataFrame (确保列顺序正确)
-        cols = ['age', 'HR', 'BUN', 'coronary heart disease', 'HGB', 'hospitalization', 'renal dysfunction']
         df_raw = pd.DataFrame([inputs])[cols]
         
         try:
@@ -155,33 +191,34 @@ if page == "Individual Assessment":
             st.stop()
 
         st.divider()
+        st.subheader("Assessment Results")
+        
         res_c1, res_c2 = st.columns([1, 1])
         
         with res_c1:
-            # 仪表盘
+            # 专业版仪表盘 (无图标，纯色)
             gauge_color = "#dc3545" if prob >= THRESHOLD else "#28a745"
             fig = go.Figure(go.Indicator(
                 mode = "gauge+number",
                 value = prob * 100,
-                title = {'text': f"<b>Mortality Risk</b><br><span style='color:gray;font-size:0.8em'>{risk_label}</span>"},
-                gauge = {'axis': {'range': [0, 100]}, 'bar': {'color': gauge_color}, 'threshold': {'line': {'color': "red"}, 'value': THRESHOLD*100}}
+                title = {'text': f"<b>3-Year Mortality Probability</b><br><span style='color:gray;font-size:0.8em'>{risk_label}</span>"},
+                gauge = {
+                    'axis': {'range': [0, 100]}, 
+                    'bar': {'color': gauge_color}, 
+                    'threshold': {'line': {'color': "black", 'width': 2}, 'thickness': 0.75, 'value': THRESHOLD*100}
+                }
             ))
             fig.update_layout(height=300, margin=dict(l=20,r=20,t=50,b=20))
             st.plotly_chart(fig, use_container_width=True)
 
         with res_c2:
-            # SHAP 解释 (使用 KernelExplainer 兼容 SVM)
-            st.subheader("🔍 Feature Contribution")
-            with st.spinner("Calculating SHAP values..."):
+            st.markdown("**Feature Contribution Analysis (SHAP)**")
+            with st.spinner("Analyzing..."):
                 try:
-                    # 使用 KMeans 汇总背景数据加速计算
                     background = shap.kmeans(scaler.mean_.reshape(1, -1), 1) 
                     explainer = shap.KernelExplainer(model.predict_proba, background)
-                    
-                    # 计算当前样本 SHAP
                     shap_values = explainer.shap_values(X_scl, nsamples=50)
                     
-                    # 兼容性提取
                     if isinstance(shap_values, list): sv = shap_values[1][0]
                     else: sv = shap_values[0] 
                     
@@ -199,15 +236,14 @@ if page == "Individual Assessment":
                     st.pyplot(fig_shap, bbox_inches='tight')
                     plt.clf()
                 except Exception as shap_err:
-                    st.warning(f"SHAP visualization unavailable for this model: {shap_err}")
-                    sv = [0]*7 # 兜底
+                    st.warning("SHAP visualization is unavailable for the current model configuration.")
 
-        st.markdown("---")
+        st.divider()
         # 生成文字报告
         nlg = ClinicalReportGenerator(inputs, prob, THRESHOLD, sv, cols, 0.5)
         full_report = nlg.generate_full_report()
         
-        with st.expander("📄 View AI Clinical Report", expanded=True):
+        with st.expander("Clinical Report (Text)", expanded=True):
             st.markdown(full_report)
         
         # PDF 下载
@@ -223,37 +259,33 @@ if page == "Individual Assessment":
         beijing_time = datetime.datetime.now() + datetime.timedelta(hours=8)
         time_str = beijing_time.strftime("%Y%m%d_%H%M")
         
-        col_down1, col_down2, col_down3 = st.columns([1, 2, 1])
-        with col_down2:
-            st.download_button(
-                label="📥 Download Official PDF Report",
-                data=pdf_engine.generate(),
-                file_name=f"ATBAD_Report_{inputs['age']}_{time_str}.pdf",
-                mime="application/pdf",
-                use_container_width=True,
-                type="primary"
-            )
+        st.download_button(
+            label="Download PDF Report",
+            data=pdf_engine.generate(),
+            file_name=f"ATBAD_Report_{inputs['age']}_{time_str}.pdf",
+            mime="application/pdf"
+        )
 
 # ----------------- PAGE 2: 批量处理 -----------------
 elif page == "Batch Analysis":
-    st.title("📊 Batch Cohort Analysis")
-    st.markdown("Upload Excel/CSV to screen multiple patients.")
+    st.title("Batch Cohort Analysis")
+    st.markdown("Upload dataset for batch risk stratification.")
 
-    with st.expander("📋 Data Template", expanded=True):
+    with st.expander("Data Formatting Requirements"):
         st.markdown("""
-        **Required Columns:** `age`, `HR`, `BUN`, `coronary heart disease` (0/1), `HGB`, `hospitalization`, `renal dysfunction` (0/1)
+        **Required Columns (Case Sensitive):** `age`, `HR`, `BUN`, `coronary heart disease`, `HGB`, `hospitalization`, `renal dysfunction`
         """)
-        # 生成 ATBAD 专用模板
+        
         template_df = pd.DataFrame(columns=[
             'ID', 'age', 'HR', 'BUN', 'coronary heart disease', 'HGB', 'hospitalization', 'renal dysfunction'
         ])
         template_df.loc[0] = ['Test_01', 65, 80, 7.5, 0, 130, 10, 0]
         template_csv = template_df.to_csv(index=False).encode('utf-8')
         
-        st.download_button("📥 Download Template", template_csv, "ATBAD_Template.csv", "text/csv")
+        st.download_button("Download CSV Template", template_csv, "ATBAD_Batch_Template.csv", "text/csv")
 
     st.divider()
-    uploaded_file = st.file_uploader("Upload Data", type=['xlsx', 'csv'])
+    uploaded_file = st.file_uploader("Upload CSV or Excel File", type=['xlsx', 'csv'])
     
     if uploaded_file:
         processor = BatchProcessor(model, scaler, imputer)
@@ -261,97 +293,40 @@ elif page == "Batch Analysis":
             if uploaded_file.name.endswith('.csv'): df_upload = pd.read_csv(uploaded_file)
             else: df_upload = pd.read_excel(uploaded_file)
             
-            st.write("Preview:", df_upload.head(3))
+            st.write("Data Preview:", df_upload.head(3))
             
-            if st.button("🚀 Start Processing", type="primary"):
+            if st.button("Start Processing"):
                 res_df, error = processor.process_data(df_upload)
                 if error:
                     st.error(error)
                 else:
-                    st.success(f"Processed {len(res_df)} records")
+                    st.success(f"Successfully processed {len(res_df)} records.")
                     st.dataframe(res_df.head())
-                    st.download_button("Download Results (Excel)", processor.convert_to_excel(res_df), "atbad_results.xlsx")
+                    st.download_button("Download Results (.xlsx)", processor.convert_to_excel(res_df), "atbad_batch_results.xlsx")
         except Exception as e:
-            st.error(f"Error: {e}")
+            st.error(f"File Error: {e}")
 
 # ----------------- PAGE 3: 看板 -----------------
 elif page == "Clinical Dashboard":
-    st.title("📈 Clinical Dashboard")
+    st.title("Clinical Data Dashboard")
     analytics = AnalyticsEngine(db)
     df_hist = analytics.get_data()
     
     if df_hist.empty:
-        st.info("No data yet. Run some predictions first.")
+        st.info("No historical data available. Please perform assessments first.")
     else:
         k1, k2, k3 = st.columns(3)
-        k1.metric("Total Cases", len(df_hist))
-        k2.metric("High Risk %", f"{len(df_hist[df_hist['risk_label']=='High Risk']) / len(df_hist):.1%}")
-        k3.metric("Avg Probability", f"{df_hist['risk_prob'].mean():.1%}")
+        k1.metric("Total Patients", len(df_hist))
+        k2.metric("High Risk Proportion", f"{len(df_hist[df_hist['risk_label']=='High Risk']) / len(df_hist):.1%}")
+        k3.metric("Avg Predicted Probability", f"{df_hist['risk_prob'].mean():.1%}")
         st.divider()
         st.plotly_chart(analytics.plot_risk_distribution(), use_container_width=True)
-
-# ----------------- PAGE 4: 文档 (移植旧版 Intro + 下载手册) -----------------
-elif page == "System Documentation":
-    st.title("ℹ️ About the Model")
-    
-    # === 移植自旧版 streamlit_app.py 的 Introduction ===
-    st.markdown("""
-    ### Machine learning predictive model for three-year mortality in Acute Type B Aortic Dissection (ATBAD)
-    
-    **Background**
-    Acute type B aortic dissection (ATBAD) is a life-threatening cardiovascular emergency with high mortality rates. 
-    Identifying high-risk patients early is crucial for timely intervention and improved outcomes. 
-    While several risk scores exist, they often lack precision for long-term prognosis.
-    
-    **Objective**
-    To develop an accurate machine learning model for predicting **three-year mortality** in patients with ATBAD, 
-    addressing the critical clinical need for improved risk stratification.
-    
-    **Methods**
-    This tool utilizes a **Support Vector Machine (SVM)** classifier, which demonstrated superior performance 
-    (AUC > 0.90) compared to Logistic Regression and other models in our validation cohort.
-    
-    **Key Predictors**
-    The model integrates 7 key clinical variables:
-    1. **Age**: Older age correlates with higher vascular fragility.
-    2. **Heart Rate (HR)**: Elevated HR indicates hemodynamic stress.
-    3. **BUN**: Renal impairment marker.
-    4. **Hemoglobin (HGB)**: Anemia suggests blood loss or chronic illness.
-    5. **Hospitalization Days**: Proxy for disease severity/complications.
-    6. **Coronary Heart Disease**: Major comorbidity.
-    7. **Renal Dysfunction**: Critical prognostic factor.
-    
-    ---
-    *Disclaimer: This tool is intended for research and educational purposes only. It should not replace professional clinical judgment.*
-    """)
-    
-    st.divider()
-    
-    # === 说明书下载模块 ===
-    st.subheader("📚 User Manual")
-    st.markdown("Download the detailed operation guide for instructions on individual assessment and batch processing.")
-    
-    BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-    # 必须确保你已经把 Word 文件上传到了 assets 文件夹
-    manual_path = os.path.join(BASE_DIR, "assets", "ATBAD_User_Manual.docx")
-    
-    if os.path.exists(manual_path):
-        with open(manual_path, "rb") as f:
-            st.download_button(
-                label="📥 Download User Manual (English) .docx",
-                data=f,
-                file_name="ATBAD_User_Manual.docx",
-                mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-                type="primary" # 醒目的样式
-            )
-    else:
-        st.warning("User Manual file not found in 'assets/'. Please verify file upload.")
 
 # --- 页脚 ---
 st.markdown("---")
 st.markdown("""
-<div style='text-align: center; color: #888; font-size: 0.8em;'>
-    Deployed by Yichang Central People's Hospital | Powered by AI & Clinical Evidence<br>
-    &copy; 2026 Medical Informatics Dept.
+<div style='text-align: center; color: #666; font-size: 0.8em; font-family: "Times New Roman", serif;'>
+    Copyright &copy; 2026 Yichang Central People's Hospital. All Rights Reserved.<br>
+    Powered by Department of Medical Informatics.
 </div>
 """, unsafe_allow_html=True)
