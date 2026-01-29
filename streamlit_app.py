@@ -10,7 +10,6 @@ import plotly.graph_objects as go
 import datetime
 
 # ================= 1. 引用自定义模块 =================
-# 确保您的 modules 文件夹下有这些文件
 from modules.database import PatientDatabase
 from modules.nlg_generator import ClinicalReportGenerator
 from modules.pdf_report import PDFReportEngine
@@ -24,7 +23,7 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
-# 加载外部 CSS (字体放大 + 卡片样式)
+# 加载外部 CSS
 def local_css(file_name):
     try:
         with open(file_name) as f:
@@ -87,7 +86,7 @@ def load_system():
 model, scaler, imputer = load_system()
 db = PatientDatabase()
 
-# === 关键修改：截断值设为 0.207 ===
+# === 核心截断值 ===
 THRESHOLD = 0.207 
 
 # ================= 4. 侧边栏导航 =================
@@ -102,10 +101,10 @@ with st.sidebar:
 
 # ================= 5. 页面路由逻辑 =================
 
-# ----------------- PAGE 1: 风险评估 (诊断核心) -----------------
+# ----------------- PAGE 1: 风险评估 -----------------
 if page == "Risk Assessment":
     
-    # 1. 顶部 Model Overview (上下结构，不分栏)
+    # 1. 顶部 Model Overview (全宽，无分栏)
     st.markdown(f"""
     <div class='overview-card'>
         <h3 style='margin-bottom:10px; margin-top:0;'>3-Year Mortality Prediction for Acute Type B Aortic Dissection</h3>
@@ -122,7 +121,6 @@ if page == "Risk Assessment":
     # 2. 输入表单
     st.markdown("##### Patient Clinical Data")
     with st.form("input_form_atbad"):
-        # 3列布局
         c1, c2, c3 = st.columns(3)
         with c1:
             age = st.number_input("Age (years)", 20, 100, 60)
@@ -134,12 +132,12 @@ if page == "Risk Assessment":
             chd = st.selectbox("Coronary Heart Disease", [0, 1], format_func=lambda x: "Yes" if x==1 else "No")
         with c3:
             renal = st.selectbox("Renal Dysfunction", [0, 1], format_func=lambda x: "Yes" if x==1 else "No")
-            st.write("") # 占位符
+            st.write("") 
             st.write("") 
             submitted = st.form_submit_button("CALCULATE RISK", type="primary")
 
     if submitted and model:
-        # 特征映射 (严格对应 scaler 的顺序)
+        # 特征映射
         cols = ['age', 'HR', 'BUN', 'coronary heart disease', 'HGB', 'hospitalization', 'renal dysfunction']
         inputs = {'age': age, 'HR': hr, 'BUN': bun, 'coronary heart disease': chd, 
                   'HGB': hgb, 'hospitalization': hosp, 'renal dysfunction': renal}
@@ -147,19 +145,13 @@ if page == "Risk Assessment":
         df_raw = pd.DataFrame([inputs])[cols]
         
         try:
-            # 预处理
             if imputer:
                 X_scl = scaler.transform(imputer.transform(df_raw))
             else:
                 X_scl = scaler.transform(df_raw)
             
-            # 预测概率
             prob = model.predict_proba(X_scl)[:, 1][0]
-            
-            # === 关键逻辑：使用 0.207 作为高危判定标准 ===
             risk_label = "High Risk" if prob >= THRESHOLD else "Low Risk"
-            
-            # 存入数据库
             db.add_record(inputs, prob, risk_label)
             
         except Exception as e:
@@ -181,68 +173,65 @@ if page == "Risk Assessment":
                 gauge = {
                     'axis': {'range': [0, 100]}, 
                     'bar': {'color': gauge_color}, 
-                    # 阈值线设为 0.207 (20.7%)
                     'threshold': {'line': {'color': "black", 'width': 3}, 'thickness': 0.75, 'value': THRESHOLD*100}
                 }
             ))
             fig.update_layout(height=300, margin=dict(l=20,r=20,t=50,b=20))
             st.plotly_chart(fig, use_container_width=True)
 
-        # === SHAP 终极修复逻辑 (解决 length-1 array 报错) ===
+        # === 简单稳健的条形图 (Simple Bar Chart) ===
         sv_clean = np.zeros(7)
         with res_c2:
-            st.markdown("**Feature Contribution (SHAP)**")
+            st.markdown("**Feature Impact Analysis**")
             with st.spinner("Analyzing..."):
                 try:
                     background = shap.kmeans(scaler.mean_.reshape(1, -1), 1) 
                     explainer = shap.KernelExplainer(model.predict_proba, background)
                     shap_values = explainer.shap_values(X_scl, nsamples=50)
                     
-                    # 1. 暴力展平：不管它是 (1,7,2) 还是 (1,7) 还是 list，全部压成一维数组
+                    # 1. 暴力展平 (同前，保证获取到数值)
                     flat_vals = np.array(shap_values).flatten()
+                    if len(flat_vals) == 14: sv_clean = flat_vals[7:] 
+                    elif len(flat_vals) == 7: sv_clean = flat_vals
+                    else: sv_clean = flat_vals[:7] if len(flat_vals) >= 7 else np.zeros(7)
                     
-                    # 2. 智能提取：
-                    # 如果 SVM 是二分类，SHAP 通常返回两个类的贡献值，总长度是 14 (2类 * 7特征)
-                    # 我们需要取 Positive Class (Class 1) 的贡献值，通常在后半部分
-                    if len(flat_vals) == 14:
-                        sv_clean = flat_vals[7:] # 取后7个
-                    elif len(flat_vals) == 7:
-                        sv_clean = flat_vals     # 刚好7个
-                    else:
-                        # 兜底：如果维度很奇怪，尝试取前7个或者报错
-                        sv_clean = flat_vals[:7] if len(flat_vals) >= 7 else np.zeros(7)
+                    sv_clean = np.array([float(x) for x in sv_clean])
 
-                    # 3. 强制转换为 Python Float 列表 (解决 numpy scalar 报错)
-                    sv_clean = [float(x) for x in sv_clean]
-                    
+                    # 2. 绘制简单条形图 (Horizontal Bar Chart)
+                    # 构造 DataFrame
+                    df_shap = pd.DataFrame({
+                        'Feature': [c.split('(')[0] for c in cols], # 去掉单位，只留名字
+                        'Impact': sv_clean
+                    })
+                    # 按绝对值排序，让影响大的在上面
+                    df_shap['Abs'] = df_shap['Impact'].abs()
+                    df_shap = df_shap.sort_values('Abs', ascending=True)
+
                     # 绘图
-                    base_val = explainer.expected_value[1] if isinstance(explainer.expected_value, list) else explainer.expected_value
+                    fig_bar, ax = plt.subplots(figsize=(5, 4))
+                    # 颜色：红(增加风险) / 蓝(降低风险)
+                    colors = ['#ff4b4b' if x > 0 else '#1f77b4' for x in df_shap['Impact']]
                     
-                    exp = shap.Explanation(
-                        values=np.array(sv_clean), 
-                        base_values=base_val, 
-                        data=df_raw.iloc[0].values, 
-                        feature_names=cols
-                    )
+                    ax.barh(df_shap['Feature'], df_shap['Impact'], color=colors)
+                    ax.axvline(0, color='black', linewidth=0.8) # 0 轴线
+                    ax.set_xlabel("Impact on Mortality Risk")
+                    ax.spines['right'].set_visible(False)
+                    ax.spines['top'].set_visible(False)
                     
-                    fig_shap, ax = plt.subplots(figsize=(5, 4))
-                    shap.plots.waterfall(exp, max_display=7, show=False)
-                    st.pyplot(fig_shap, bbox_inches='tight')
+                    st.pyplot(fig_bar, bbox_inches='tight')
                     plt.clf()
-                    
+
                 except Exception as shap_err:
-                    st.warning(f"SHAP Analysis Unavailable: {shap_err}")
-                    # 报错时 sv_clean 保持为 [0,0...]，保证下方报告不崩
+                    st.warning(f"Feature Analysis Unavailable: {shap_err}")
+                    sv_clean = [0.0] * 7
 
         st.divider()
-        # 生成文字报告 (传入 sv_clean 列表)
-        nlg = ClinicalReportGenerator(inputs, prob, THRESHOLD, sv_clean, cols, 0.5)
+        nlg = ClinicalReportGenerator(inputs, prob, THRESHOLD, sv_clean.tolist(), cols, 0.5)
         full_report = nlg.generate_full_report()
         
         with st.expander("📄 View Clinical Report", expanded=True):
             st.markdown(full_report)
         
-        # PDF 下载
         pdf_buffer = io.BytesIO()
         pdf_engine = PDFReportEngine(pdf_buffer, inputs, {'prob': prob, 'threshold': THRESHOLD, 'risk_label': risk_label}, full_report)
         
@@ -262,15 +251,9 @@ elif page == "Batch Analysis":
         processor = BatchProcessor(model, scaler, imputer)
         if st.button("Start Processing"):
             df = pd.read_csv(uploaded_file) if uploaded_file.name.endswith('.csv') else pd.read_excel(uploaded_file)
-            
-            # 注意：批量处理也需要使用正确的 THRESHOLD 进行判定
-            # 我们需要去修改 modules/batch_processor.py 才能生效
-            # 但在这里我们至少可以保证 processor 返回概率
             res_df, err = processor.process_data(df)
-            
             if err: st.error(err)
             else:
-                # 在这里重新计算 Risk_Level，确保使用 0.207
                 if 'Mortality_Risk_Prob' in res_df.columns:
                     res_df['Risk_Level'] = res_df['Mortality_Risk_Prob'].apply(lambda x: "High Risk" if x >= THRESHOLD else "Low Risk")
                 
