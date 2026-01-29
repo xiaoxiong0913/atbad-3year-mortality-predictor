@@ -52,6 +52,7 @@ class PDFReportEngine:
         chd_str = "Yes" if self.data.get('coronary heart disease') == 1 else "No"
         renal_str = "Yes" if self.data.get('renal dysfunction') == 1 else "No"
         
+        # 表格行定义
         rows = [
             ("Age (years)", f"{self.data.get('age', 0)}"),
             ("Heart Rate (bpm)", f"{self.data.get('HR', 0)}"),
@@ -73,9 +74,10 @@ class PDFReportEngine:
                 self.c.rect(self.margin, current_y - row_height + 2*mm, self.width - 2*self.margin, row_height, fill=1, stroke=0)
             
             self.c.setFillColor(colors.black)
+            # 标签列
             self.c.setFont("Times-Bold", 10)
             self.c.drawString(self.margin + 5*mm, current_y - 4*mm, label)
-            
+            # 数值列
             self.c.setFont("Times-Roman", 10)
             self.c.drawString(self.margin + col_width, current_y - 4*mm, str(val))
             
@@ -98,7 +100,6 @@ class PDFReportEngine:
         
         # 红色代表高危
         fill_color = colors.red if prob >= threshold else colors.green
-        # 计算填充长度 (归一化到 Bar 宽度)
         fill_width = min(bar_width, bar_width * prob) # 假设最大 100%
         
         self.c.setFillColor(fill_color)
