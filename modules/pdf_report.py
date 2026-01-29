@@ -7,33 +7,27 @@ import datetime
 import textwrap
 
 class PDFReportEngine:
-    """
-    A specialized rendering engine for CDSS reports using ReportLab Canvas.
-    """
-    
     def __init__(self, buffer, patient_data, predict_result, nlg_report):
         self.buffer = buffer
         self.data = patient_data
         self.res = predict_result
         self.text = nlg_report
         
-        # Canvas Settings
         self.c = canvas.Canvas(self.buffer, pagesize=A4)
         self.width, self.height = A4
         self.margin = 20 * mm
         self.y = self.height - self.margin
         
-        # Meta Info
         self.hospital_name = "Yichang Central People's Hospital"
-        self.system_name = "DR-MACE Risk Stratification System v2.0"
+        self.system_name = "ATBAD 3-Year Mortality Predictor (SVM)"
 
     def _draw_header(self):
         self.c.setFillColor(colors.HexColor("#003366"))
         self.c.rect(0, self.height - 30*mm, self.width, 30*mm, fill=1, stroke=0)
         
         self.c.setFillColor(colors.white)
-        self.c.setFont("Times-Bold", 18) # 使用 Times 字体
-        self.c.drawString(self.margin, self.height - 15*mm, "Clinical Risk Assessment Report")
+        self.c.setFont("Times-Bold", 18)
+        self.c.drawString(self.margin, self.height - 15*mm, "ATBAD Clinical Risk Assessment")
         
         self.c.setFont("Times-Roman", 10)
         self.c.drawString(self.margin, self.height - 22*mm, f"{self.hospital_name} | {self.system_name}")
@@ -50,17 +44,22 @@ class PDFReportEngine:
         self.y -= 5 * mm
         
         col_width = (self.width - 2*self.margin) / 2
-        row_height = 8 * mm
+        row_height = 7 * mm
         start_y = self.y
         
-        # --- 关键修改：单位放入标签列，数值列只留数字 ---
+        # --- ATBAD 7个特征 ---
+        # 格式化处理：Yes/No转换
+        chd_str = "Yes" if self.data.get('coronary heart disease') == 1 else "No"
+        renal_str = "Yes" if self.data.get('renal dysfunction') == 1 else "No"
+        
         rows = [
-            ("Gender", self.data.get('Gender', 'N/A')),
-            ("Systolic BP (mmHg)", f"{self.data.get('SBP(mmHg)', 0)}"),  # 纯数字
-            ("Hemoglobin (g/L)", f"{self.data.get('HGB(g/L)', 0)}"),     # 纯数字
-            ("BUN (mmol/L)", f"{self.data.get('BUN(mmol/L)', 0)}"),      # 纯数字
-            ("ECG Findings", "Abnormal" if self.data.get('T wave  abnormalities')==1 else "Normal"),
-            ("Statin Therapy", "Yes" if self.data.get('Statins')==1 else "No")
+            ("Age (years)", f"{self.data.get('age', 0)}"),
+            ("Heart Rate (bpm)", f"{self.data.get('HR', 0)}"),
+            ("BUN (mmol/L)", f"{self.data.get('BUN', 0)}"),
+            ("Hemoglobin (g/L)", f"{self.data.get('HGB', 0)}"),
+            ("Hospitalization (days)", f"{self.data.get('hospitalization', 0)}"),
+            ("Coronary Heart Disease", chd_str),
+            ("Renal Dysfunction", renal_str)
         ]
         
         self.c.setFont("Times-Roman", 10)
@@ -74,21 +73,19 @@ class PDFReportEngine:
                 self.c.rect(self.margin, current_y - row_height + 2*mm, self.width - 2*self.margin, row_height, fill=1, stroke=0)
             
             self.c.setFillColor(colors.black)
-            # 标签列（左对齐）
             self.c.setFont("Times-Bold", 10)
-            self.c.drawString(self.margin + 5*mm, current_y, label)
+            self.c.drawString(self.margin + 5*mm, current_y - 4*mm, label)
             
-            # 数值列（左对齐，但因为是纯数字会很整齐）
             self.c.setFont("Times-Roman", 10)
-            self.c.drawString(self.margin + col_width, current_y, str(val))
+            self.c.drawString(self.margin + col_width, current_y - 4*mm, str(val))
             
-            self.c.line(self.margin, current_y - 2*mm, self.width - self.margin, current_y - 2*mm)
+            self.c.line(self.margin, current_y - 7*mm, self.width - self.margin, current_y - 7*mm)
             
         self.y = start_y - (len(rows) * row_height) - 10*mm
 
     def _draw_risk_gauge(self):
         self.c.setFont("Times-Bold", 12)
-        self.c.drawString(self.margin, self.y, "2. MACE Risk Stratification")
+        self.c.drawString(self.margin, self.y, "2. Mortality Risk Stratification")
         self.y -= 10 * mm
         
         bar_width = self.width - 2*self.margin
@@ -99,30 +96,33 @@ class PDFReportEngine:
         self.c.setFillColor(colors.lightgrey)
         self.c.roundRect(self.margin, self.y, bar_width, bar_height, 2*mm, fill=1, stroke=0)
         
+        # 红色代表高危
         fill_color = colors.red if prob >= threshold else colors.green
-        fill_width = min(bar_width, bar_width * (prob / 0.5)) 
+        # 计算填充长度 (归一化到 Bar 宽度)
+        fill_width = min(bar_width, bar_width * prob) # 假设最大 100%
         
         self.c.setFillColor(fill_color)
         self.c.roundRect(self.margin, self.y, fill_width, bar_height, 2*mm, fill=1, stroke=0)
         
-        thresh_x = self.margin + (bar_width * (threshold / 0.5))
+        # 画阈值线
+        thresh_x = self.margin + (bar_width * threshold)
         self.c.setStrokeColor(colors.black)
         self.c.setLineWidth(2)
         self.c.line(thresh_x, self.y - 2*mm, thresh_x, self.y + bar_height + 2*mm)
-        self.c.drawString(thresh_x - 10*mm, self.y + bar_height + 3*mm, f"Threshold {threshold}")
+        self.c.drawString(thresh_x - 5*mm, self.y + bar_height + 3*mm, f"Cut-off: {threshold}")
         
         self.y -= 8 * mm
         self.c.setFont("Times-Bold", 14)
         self.c.setFillColor(fill_color)
-        self.c.drawString(self.margin, self.y, f"Predicted Probability: {prob:.1%}")
-        self.c.drawRightString(self.width - self.margin, self.y, f"Classification: {self.res['risk_label']}")
+        self.c.drawString(self.margin, self.y, f"Predicted Risk: {prob:.1%}")
+        self.c.drawRightString(self.width - self.margin, self.y, f"Status: {self.res['risk_label']}")
         
         self.y -= 15 * mm
 
     def _draw_narrative(self):
         self.c.setFillColor(colors.black)
         self.c.setFont("Times-Bold", 12)
-        self.c.drawString(self.margin, self.y, "3. AI-Generated Clinical Analysis")
+        self.c.drawString(self.margin, self.y, "3. AI Clinical Analysis")
         self.y -= 8 * mm
         
         self.c.setFont("Times-Roman", 10)
@@ -153,9 +153,7 @@ class PDFReportEngine:
         self.c.saveState()
         self.c.setFont("Times-Italic", 8)
         self.c.setFillColor(colors.grey)
-        
-        footer_text = "For Reference Only. Not for primary diagnosis. (C) 2026 Yichang Central People's Hospital."
-        
+        footer_text = "Generated by ATBAD-SVM Predictor. (C) 2026 Yichang Central People's Hospital."
         self.c.drawCentredString(self.width / 2, 10*mm, footer_text)
         self.c.restoreState()
 
@@ -165,7 +163,6 @@ class PDFReportEngine:
         self._draw_risk_gauge()
         self._draw_narrative()
         self._draw_footer()
-        
         self.c.save()
         self.buffer.seek(0)
         return self.buffer
