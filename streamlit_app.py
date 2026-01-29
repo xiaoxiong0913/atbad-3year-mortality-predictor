@@ -30,6 +30,7 @@ def local_css(file_name):
         with open(file_name) as f:
             st.markdown(f'<style>{f.read()}</style>', unsafe_allow_html=True)
     except FileNotFoundError:
+        # 兜底样式
         st.markdown("""
         <style>
             .protocol-card { padding: 15px; border-radius: 8px; margin-bottom: 15px; background: white; box-shadow: 0 1px 3px rgba(0,0,0,0.1); }
@@ -50,7 +51,7 @@ def load_system():
         with open(os.path.join(ASSETS_DIR, "svm_model.pkl"), 'rb') as f: model = pickle.load(f)
         with open(os.path.join(ASSETS_DIR, "scaler.pkl"), 'rb') as f: scaler = pickle.load(f)
         
-        # ATBAD 项目可能没有 imputer，如果没有就不加载
+        # 检查是否有插补器 (ATBAD 项目通常不需要，但保留兼容性)
         imputer = None
         if os.path.exists(os.path.join(ASSETS_DIR, "imputer.pkl")):
             with open(os.path.join(ASSETS_DIR, "imputer.pkl"), 'rb') as f: imputer = pickle.load(f)
@@ -63,13 +64,13 @@ def load_system():
 model, scaler, imputer = load_system()
 db = PatientDatabase()
 
-# ATBAD 模型通常阈值默认为 0.5，如果有特定 cutoff 请在此修改
+# ATBAD 模型默认阈值
 THRESHOLD = 0.5 
 
 # ================= 4. 侧边栏导航 =================
 with st.sidebar:
     st.title("❤️ ATBAD Predictor")
-    st.caption("ver 3.0.1 | SVM Powered")
+    st.caption("ver 3.0.2 | SVM Powered")
     st.markdown("---")
     
     page = st.radio(
@@ -119,7 +120,7 @@ if page == "Individual Assessment":
         submitted = st.form_submit_button("🚀 Run Risk Prediction")
 
     if submitted and model:
-        # 构造输入字典 (Key 必须与 features.txt 一致)
+        # 构造输入字典 (Key 必须与 features.txt 完全一致)
         inputs = {
             'age': age,
             'HR': hr,
@@ -130,7 +131,7 @@ if page == "Individual Assessment":
             'renal dysfunction': renal
         }
         
-        # 转换为 DataFrame (注意列顺序)
+        # 转换为 DataFrame (确保列顺序正确)
         cols = ['age', 'HR', 'BUN', 'coronary heart disease', 'HGB', 'hospitalization', 'renal dysfunction']
         df_raw = pd.DataFrame([inputs])[cols]
         
@@ -182,7 +183,7 @@ if page == "Individual Assessment":
                     
                     # 兼容性提取
                     if isinstance(shap_values, list): sv = shap_values[1][0]
-                    else: sv = shap_values[0] # 部分 SVM 实现返回结构不同
+                    else: sv = shap_values[0] 
                     
                     base_val = explainer.expected_value[1] if isinstance(explainer.expected_value, list) else explainer.expected_value
 
@@ -198,7 +199,7 @@ if page == "Individual Assessment":
                     st.pyplot(fig_shap, bbox_inches='tight')
                     plt.clf()
                 except Exception as shap_err:
-                    st.warning(f"SHAP visualization unavailable for this model type: {shap_err}")
+                    st.warning(f"SHAP visualization unavailable for this model: {shap_err}")
                     sv = [0]*7 # 兜底
 
         st.markdown("---")
@@ -289,7 +290,7 @@ elif page == "Clinical Dashboard":
         st.divider()
         st.plotly_chart(analytics.plot_risk_distribution(), use_container_width=True)
 
-# ----------------- PAGE 4: 文档 (移植旧版 Intro) -----------------
+# ----------------- PAGE 4: 文档 (移植旧版 Intro + 下载手册) -----------------
 elif page == "System Documentation":
     st.title("ℹ️ About the Model")
     
@@ -324,6 +325,28 @@ elif page == "System Documentation":
     *Disclaimer: This tool is intended for research and educational purposes only. It should not replace professional clinical judgment.*
     """)
     
+    st.divider()
+    
+    # === 说明书下载模块 ===
+    st.subheader("📚 User Manual")
+    st.markdown("Download the detailed operation guide for instructions on individual assessment and batch processing.")
+    
+    BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+    # 必须确保你已经把 Word 文件上传到了 assets 文件夹
+    manual_path = os.path.join(BASE_DIR, "assets", "ATBAD_User_Manual.docx")
+    
+    if os.path.exists(manual_path):
+        with open(manual_path, "rb") as f:
+            st.download_button(
+                label="📥 Download User Manual (English) .docx",
+                data=f,
+                file_name="ATBAD_User_Manual.docx",
+                mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+                type="primary" # 醒目的样式
+            )
+    else:
+        st.warning("User Manual file not found in 'assets/'. Please verify file upload.")
+
 # --- 页脚 ---
 st.markdown("---")
 st.markdown("""
