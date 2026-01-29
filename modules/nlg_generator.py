@@ -55,21 +55,23 @@ class ClinicalReportGenerator:
     def _analyze_shap_impact(self):
         narratives = []
         
-        # --- 修复报错的核心逻辑 ---
-        # 确保 shap_values 是纯数字列表，而不是 numpy 数组
+        # 清洗数据
         clean_shap_values = []
         for v in self.shap_values:
             if isinstance(v, (np.ndarray, list)):
-                clean_shap_values.append(float(v[0]) if len(v) > 0 else 0.0)
+                # 尝试获取标量值
+                if hasattr(v, 'item'): 
+                     clean_shap_values.append(v.item())
+                elif len(v) > 0:
+                     clean_shap_values.append(float(v[0]))
+                else:
+                     clean_shap_values.append(0.0)
             else:
                 clean_shap_values.append(float(v))
         
         feature_impacts = zip(self.feature_names, clean_shap_values)
-        
-        # 安全排序
         sorted_features = sorted(feature_impacts, key=lambda x: abs(x[1]), reverse=True)
-        # ------------------------
-
+        
         narratives.append("#### AI Risk Factor Analysis")
         narratives.append("The AI model identified the following top contributors to the mortality risk:")
         
@@ -109,9 +111,17 @@ class ClinicalReportGenerator:
         if hosp > self.rules['Hosp']['long']:
             advice.append(f"5. **Recovery**: Prolonged hospitalization ({hosp} days). Assess for nosocomial complications and rehabilitation needs.")
 
+        # === 修改点：高危提示 ===
+        # 使用 HTML span 标签控制颜色为红色 (#dc3545)，加粗，但字号保持默认 (不使用标题)
         if self.prob >= self.threshold:
             advice.append("---")
-            advice.append("⚠️ **High Risk Alert**: This patient is in the high-risk group for 3-year mortality. Consider closer surveillance (CTA every 3-6 months) and aggressive risk factor modification.")
+            alert_text = (
+                "<span style='color: #dc3545; font-weight: bold; font-size: 16px;'>"
+                "⚠️ High Risk Alert: This patient is in the high-risk group for 3-year mortality. "
+                "Consider closer surveillance (CTA every 3-6 months) and aggressive risk factor modification."
+                "</span>"
+            )
+            advice.append(alert_text)
             
         return "\n\n".join(advice)
 
