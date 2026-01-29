@@ -137,7 +137,6 @@ if page == "Risk Assessment":
             submitted = st.form_submit_button("CALCULATE RISK", type="primary")
 
     if submitted and model:
-        # 特征映射
         cols = ['age', 'HR', 'BUN', 'coronary heart disease', 'HGB', 'hospitalization', 'renal dysfunction']
         inputs = {'age': age, 'HR': hr, 'BUN': bun, 'coronary heart disease': chd, 
                   'HGB': hgb, 'hospitalization': hosp, 'renal dysfunction': renal}
@@ -179,7 +178,7 @@ if page == "Risk Assessment":
             fig.update_layout(height=300, margin=dict(l=20,r=20,t=50,b=20))
             st.plotly_chart(fig, use_container_width=True)
 
-        # === 升级版：Plotly 棒棒糖图 (Lollipop Chart) ===
+        # === 森林图风格的双向条形图 ===
         sv_clean = np.zeros(7)
         with res_c2:
             st.markdown("**Feature Impact Analysis**")
@@ -189,7 +188,7 @@ if page == "Risk Assessment":
                     explainer = shap.KernelExplainer(model.predict_proba, background)
                     shap_values = explainer.shap_values(X_scl, nsamples=50)
                     
-                    # 1. 暴力清洗数据 (保持稳健)
+                    # 1. 暴力清洗
                     flat_vals = np.array(shap_values).flatten()
                     if len(flat_vals) == 14: sv_clean = flat_vals[7:] 
                     elif len(flat_vals) == 7: sv_clean = flat_vals
@@ -197,51 +196,50 @@ if page == "Risk Assessment":
                     
                     sv_clean = np.array([float(x) for x in sv_clean])
 
-                    # 2. 构造绘图数据
+                    # 2. 构造数据
                     df_shap = pd.DataFrame({
                         'Feature': [c.split('(')[0] for c in cols],
                         'Impact': sv_clean
                     })
-                    # 按绝对值排序，让重要的在上面
+                    # 按绝对值排序
                     df_shap['Abs'] = df_shap['Impact'].abs()
                     df_shap = df_shap.sort_values('Abs', ascending=True)
+
+                    # 3. 绘图 (Plotly Bar Chart - Forest Plot Style)
+                    fig_bar = go.Figure()
                     
-                    # 定义颜色
-                    df_shap['Color'] = ['#FF4B4B' if x > 0 else '#1F77B4' for x in df_shap['Impact']]
-
-                    # 3. 使用 Plotly 绘制棒棒糖图
-                    fig_lolly = go.Figure()
-
-                    # 画线 (Stick)
-                    for index, row in df_shap.iterrows():
-                        fig_lolly.add_shape(
-                            type='line',
-                            x0=0, y0=row['Feature'],
-                            x1=row['Impact'], y1=row['Feature'],
-                            line=dict(color='gray', width=1)
-                        )
-
-                    # 画圆点 (Candy)
-                    fig_lolly.add_trace(go.Scatter(
-                        x=df_shap['Impact'],
+                    # 添加条形
+                    fig_bar.add_trace(go.Bar(
                         y=df_shap['Feature'],
-                        mode='markers',
-                        marker=dict(color=df_shap['Color'], size=12),
-                        name='Impact',
-                        showlegend=False,
-                        hovertemplate='<b>%{y}</b><br>Impact: %{x:.4f}<extra></extra>'
+                        x=df_shap['Impact'],
+                        orientation='h',
+                        marker=dict(
+                            color=df_shap['Impact'],
+                            colorscale=['#1f77b4', '#d3d3d3', '#dc3545'], # 蓝 -> 灰 -> 红
+                            cmid=0, # 0为中心点
+                            showscale=False
+                        ),
+                        text=df_shap['Impact'].apply(lambda x: f"{x:+.3f}"), # 显示数值
+                        textposition='auto'
                     ))
 
                     # 布局美化
-                    fig_lolly.update_layout(
+                    fig_bar.update_layout(
                         height=400,
-                        margin=dict(l=0, r=0, t=20, b=20),
-                        xaxis=dict(title="Impact on Risk Probability", zeroline=True, zerolinewidth=2, zerolinecolor='black'),
+                        margin=dict(l=0, r=0, t=30, b=20),
+                        xaxis=dict(
+                            title="Impact on Risk (SHAP Value)",
+                            zeroline=True,
+                            zerolinewidth=2,
+                            zerolinecolor='black', # 明显的 0 轴线
+                            showgrid=True,
+                            gridcolor='#eee'
+                        ),
                         yaxis=dict(showgrid=False),
                         plot_bgcolor='rgba(0,0,0,0)'
                     )
-
-                    st.plotly_chart(fig_lolly, use_container_width=True)
+                    
+                    st.plotly_chart(fig_bar, use_container_width=True)
 
                 except Exception as shap_err:
                     st.warning(f"Feature Analysis Unavailable: {shap_err}")
