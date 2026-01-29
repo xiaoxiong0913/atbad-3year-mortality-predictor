@@ -31,14 +31,15 @@ def local_css(file_name):
     except FileNotFoundError:
         st.markdown("""
         <style>
-            /* 简洁风格 */
-            .main-header { font-family: 'Helvetica Neue', sans-serif; font-weight: bold; color: #333; }
-            .stButton>button { width: 100%; border-radius: 5px; height: 3em; background-color: #007bff; color: white; }
-            .stButton>button:hover { background-color: #0056b3; color: white; }
-            /* 输入框标签加粗 */
-            .stNumberInput label, .stSelectbox label { font-weight: 600; font-size: 0.9rem; }
-            /* 右侧卡片样式 */
-            .overview-card { background-color: #f8f9fa; padding: 20px; border-radius: 8px; border-left: 5px solid #007bff; box-shadow: 0 2px 4px rgba(0,0,0,0.05); }
+            .overview-card { 
+                background-color: #f8f9fa; 
+                padding: 20px; 
+                border-radius: 8px; 
+                border-left: 5px solid #007bff; 
+                box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+                margin-bottom: 20px;
+            }
+            .stButton>button { width: 100%; font-weight: bold; }
         </style>
         """, unsafe_allow_html=True)
 
@@ -80,51 +81,41 @@ with st.sidebar:
 
 # ================= 5. 页面路由逻辑 =================
 
-# ----------------- PAGE 1: 单例预测 (重构版) -----------------
+# ----------------- PAGE 1: 单例预测 (上下结构) -----------------
 if page == "Risk Assessment":
-    st.title("Individual Risk Assessment")
-    st.markdown("---")
-
-    # 布局：左侧表单 (2)，右侧说明 (1)
-    col1, col2 = st.columns([2, 1])
     
-    with col1:
-        with st.form("input_form_atbad"):
-            st.markdown("##### Patient Clinical Data")
-            
-            # 第一行：3个基础指标
-            r1c1, r1c2, r1c3 = st.columns(3)
-            with r1c1: age = st.number_input("Age (years)", 20, 100, 60)
-            with r1c2: hr = st.number_input("Heart Rate (bpm)", 30, 180, 80)
-            with r1c3: hgb = st.number_input("Hemoglobin (g/L)", 30, 250, 130)
-            
-            # 第二行：3个进阶指标
-            r2c1, r2c2, r2c3 = st.columns(3)
-            with r2c1: bun = st.number_input("BUN (mmol/L)", 0.1, 100.0, 7.0, 0.1)
-            with r2c2: hosp = st.number_input("Hospitalization (days)", 1, 100, 10)
-            with r2c3: chd = st.selectbox("Coronary Heart Disease", [0, 1], format_func=lambda x: "Yes" if x==1 else "No")
-            
-            # 第三行：1个指标
-            r3c1, r3c2, r3c3 = st.columns(3)
-            with r3c1: renal = st.selectbox("Renal Dysfunction", [0, 1], format_func=lambda x: "Yes" if x==1 else "No")
-            
-            st.markdown("<br>", unsafe_allow_html=True)
-            submitted = st.form_submit_button("CALCULATE RISK")
-
-    with col2:
-        # === 严格只放您要求的代码 ===
-        st.markdown("<div class='overview-card'>", unsafe_allow_html=True)
-        st.markdown("<h3 style='margin-bottom:10px; margin-top:0;'>3-Year Mortality Prediction for Acute Type B Aortic Dissection</h3>", unsafe_allow_html=True)
-        st.markdown("<h4 style='margin-bottom:10px;'>Model Overview</h4>", unsafe_allow_html=True)
-        st.markdown("""
-        <p style='font-size:14px;'>
-        This predictive tool uses an SVM machine learning model to estimate 3-year mortality risk in patients with acute Type B aortic dissection.<br>
-        - AUC: <b>0.94</b><br>
-        - Accuracy: <b>88.8%</b><br>
-        - Risk Threshold: <b>0.207</b>
+    # 1. 顶部 Model Overview (直接放在输入界面上面)
+    st.markdown("""
+    <div class='overview-card'>
+        <h3 style='margin-bottom:10px; margin-top:0;'>3-Year Mortality Prediction for Acute Type B Aortic Dissection</h3>
+        <h4 style='margin-bottom:10px; color:#555;'>Model Overview</h4>
+        <p style='font-size:14px; line-height:1.5;'>
+            This predictive tool uses an SVM machine learning model to estimate 3-year mortality risk in patients with acute Type B aortic dissection.<br>
+            - AUC: <b>0.94</b><br>
+            - Accuracy: <b>88.8%</b><br>
+            - Risk Threshold: <b>0.207</b>
         </p>
-        """, unsafe_allow_html=True)
-        st.markdown("</div>", unsafe_allow_html=True)
+    </div>
+    """, unsafe_allow_html=True)
+
+    # 2. 输入表单 (Full Width)
+    st.markdown("##### Patient Clinical Data")
+    with st.form("input_form_atbad"):
+        # 为了美观，表单内部还是分列，但整体不再分左右栏
+        c1, c2, c3 = st.columns(3)
+        with c1:
+            age = st.number_input("Age (years)", 20, 100, 60)
+            hr = st.number_input("Heart Rate (bpm)", 30, 180, 80)
+            hosp = st.number_input("Hospitalization (days)", 1, 100, 10)
+        with c2:
+            hgb = st.number_input("Hemoglobin (g/L)", 30, 250, 130)
+            bun = st.number_input("BUN (mmol/L)", 0.1, 100.0, 7.0, 0.1)
+            chd = st.selectbox("Coronary Heart Disease", [0, 1], format_func=lambda x: "Yes" if x==1 else "No")
+        with c3:
+            renal = st.selectbox("Renal Dysfunction", [0, 1], format_func=lambda x: "Yes" if x==1 else "No")
+            st.write("") # Spacer
+            st.write("") # Spacer
+            submitted = st.form_submit_button("CALCULATE RISK", type="primary")
 
     if submitted and model:
         # 特征映射
@@ -151,6 +142,7 @@ if page == "Risk Assessment":
         st.divider()
         st.subheader("Prediction Results")
         
+        # 结果展示区
         res_c1, res_c2 = st.columns([1, 1])
         
         with res_c1:
@@ -164,7 +156,7 @@ if page == "Risk Assessment":
             fig.update_layout(height=300, margin=dict(l=20,r=20,t=50,b=20))
             st.plotly_chart(fig, use_container_width=True)
 
-        # SHAP 修复逻辑
+        # === SHAP 终极修复逻辑 ===
         sv_clean = np.zeros(7)
         with res_c2:
             st.markdown("**Feature Contribution (SHAP)**")
@@ -174,30 +166,28 @@ if page == "Risk Assessment":
                     explainer = shap.KernelExplainer(model.predict_proba, background)
                     shap_values = explainer.shap_values(X_scl, nsamples=50)
                     
-                    # === 终极修复：处理所有可能的数组形状 ===
-                    # 目标：拿到 positive class 的 (7,) 一维数组
+                    # 1. 提取 List (如果是二分类，取 Class 1)
                     if isinstance(shap_values, list):
-                        target = shap_values[1] # 二分类取第二个
+                        raw_vals = shap_values[1]
                     else:
-                        target = shap_values
-
-                    # 如果是 (1, 7, 2) -> 取 (0, :, 1) -> (7,)
-                    # 如果是 (1, 7) -> 取 (0, :) -> (7,)
-                    target = np.array(target)
-                    if len(target.shape) == 3: # (samples, features, classes)
-                        sv_clean = target[0, :, 1]
-                    elif len(target.shape) == 2: # (samples, features)
-                        sv_clean = target[0, :]
-                    else:
-                        sv_clean = target # 已经是 (features,)
-
-                    # 确保是 float 类型
-                    sv_clean = sv_clean.astype(float)
+                        raw_vals = shap_values
+                        
+                    # 2. 转 Numpy 并 Squeeze (去除多余的维度 1)
+                    raw_vals = np.array(raw_vals)
+                    raw_vals = np.squeeze(raw_vals) # 这一步会将 (1, 7) 变成 (7,)
                     
+                    # 3. 再次检查维度，防止 squeeze 过度 (例如单个特征)
+                    if raw_vals.ndim == 0: # 如果变成了 scalar
+                        raw_vals = np.array([raw_vals])
+                        
+                    # 4. 强制转为 Python Float List (解决 length-1 array error)
+                    sv_clean = [float(x) for x in raw_vals]
+                    
+                    # 5. 生成图表
                     base_val = explainer.expected_value[1] if isinstance(explainer.expected_value, list) else explainer.expected_value
 
                     exp = shap.Explanation(
-                        values=sv_clean, 
+                        values=np.array(sv_clean), 
                         base_values=base_val, 
                         data=df_raw.iloc[0].values, 
                         feature_names=cols
@@ -208,7 +198,9 @@ if page == "Risk Assessment":
                     st.pyplot(fig_shap, bbox_inches='tight')
                     plt.clf()
                 except Exception as shap_err:
-                    st.warning(f"SHAP Error: {shap_err}")
+                    st.warning(f"SHAP Analysis Unavailable: {shap_err}")
+                    # 发生错误时，确保 sv_clean 是列表，防止后面报错
+                    sv_clean = [0.0] * 7
 
         st.divider()
         nlg = ClinicalReportGenerator(inputs, prob, THRESHOLD, sv_clean, cols, 0.5)
