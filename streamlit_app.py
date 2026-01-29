@@ -38,7 +38,7 @@ def local_css(file_name):
             font-family: 'Helvetica Neue', sans-serif;
             font-size: 18px; 
         }
-        /* 顶部 Overview 卡片 */
+        /* Overview 卡片 */
         .overview-card { 
             background-color: #f8f9fa; 
             padding: 20px; 
@@ -104,45 +104,55 @@ with st.sidebar:
 
 # ----------------- PAGE 1: 风险评估 -----------------
 if page == "Risk Assessment":
-    
-    # 1. 顶部 Model Overview
-    st.markdown(f"""
-    <div class='overview-card'>
-        <h3 style='margin-bottom:10px; margin-top:0;'>3-Year Mortality Prediction for Acute Type B Aortic Dissection</h3>
-        <h4 style='margin-bottom:10px; color:#555;'>Model Overview</h4>
-        <p style='font-size:16px; line-height:1.5;'>
-            This predictive tool uses an SVM machine learning model to estimate 3-year mortality risk in patients with acute Type B aortic dissection.<br>
-            - AUC: <b>0.94</b><br>
-            - Accuracy: <b>88.8%</b><br>
-            - Risk Threshold: <b>{THRESHOLD}</b> (Probabilities ≥ {THRESHOLD:.1%} are classified as High Risk)
-        </p>
-    </div>
-    """, unsafe_allow_html=True)
+    st.title("Individual Risk Assessment")
+    st.markdown("---")
 
-    # 2. 输入表单 (布局调整)
-    st.markdown("##### Patient Clinical Data")
-    with st.form("input_form_atbad"):
-        # 3列布局
-        c1, c2, c3 = st.columns(3)
-        
-        # 第一列：基础指标
-        with c1:
-            age = st.number_input("Age (years)", 20, 100, 60)
-            hr = st.number_input("Heart Rate (bpm)", 30, 180, 80)
-            hosp = st.number_input("Hospitalization (days)", 1, 100, 10)
+    # === 布局核心：左侧 (2) 表单，右侧 (1) 简介 ===
+    col_left, col_right = st.columns([2, 1])
+    
+    # --- 左侧：输入表单 ---
+    with col_left:
+        st.markdown("##### Patient Clinical Data")
+        with st.form("input_form_atbad"):
+            # 内部再分3列
+            c1, c2, c3 = st.columns(3)
             
-        # 第二列：实验室指标
-        with c2:
-            bun = st.number_input("BUN (mmol/L)", 0.1, 100.0, 7.0, 0.1)
-            hgb = st.number_input("Hemoglobin (g/L)", 30, 250, 130)
+            # 第一列
+            with c1:
+                age = st.number_input("Age (years)", 20, 100, 60)
+                hr = st.number_input("Heart Rate (bpm)", 30, 180, 80)
+                hosp = st.number_input("Hospitalization (days)", 1, 100, 10)
+                
+            # 第二列
+            with c2:
+                bun = st.number_input("BUN (mmol/L)", 0.1, 100.0, 7.0, 0.1)
+                hgb = st.number_input("Hemoglobin (g/L)", 30, 250, 130)
+                st.write("") 
+                
+            # 第三列 (单独放 CHD 和 Renal)
+            with c3:
+                chd = st.selectbox("Coronary Heart Disease", [0, 1], format_func=lambda x: "Yes" if x==1 else "No")
+                renal = st.selectbox("Renal Dysfunction", [0, 1], format_func=lambda x: "Yes" if x==1 else "No")
             
-        # 第三列：并发症/分类变量 (单独)
-        with c3:
-            chd = st.selectbox("Coronary Heart Disease", [0, 1], format_func=lambda x: "Yes" if x==1 else "No")
-            renal = st.selectbox("Renal Dysfunction", [0, 1], format_func=lambda x: "Yes" if x==1 else "No")
-        
-        st.markdown("<br>", unsafe_allow_html=True)
-        submitted = st.form_submit_button("CALCULATE RISK", type="primary")
+            # 按钮 (在表单内底部)
+            st.markdown("<br>", unsafe_allow_html=True)
+            submitted = st.form_submit_button("CALCULATE RISK", type="primary")
+
+    # --- 右侧：Model Overview 卡片 ---
+    with col_right:
+        st.markdown(f"""
+        <div class='overview-card'>
+            <h3 style='margin-bottom:15px; margin-top:0; font-size:1.4rem;'>3-Year Mortality Prediction</h3>
+            <h4 style='margin-bottom:10px; color:#555; font-size:1.1rem;'>Model Overview</h4>
+            <p style='font-size:15px; line-height:1.6;'>
+                This predictive tool uses an <b>SVM machine learning model</b> to estimate 3-year mortality risk in patients with acute Type B aortic dissection.<br><br>
+                <b>Performance:</b><br>
+                - AUC: <b>0.94</b><br>
+                - Accuracy: <b>88.8%</b><br>
+                - Risk Threshold: <b>{THRESHOLD}</b>
+            </p>
+        </div>
+        """, unsafe_allow_html=True)
 
     if submitted and model:
         # 特征映射
@@ -169,16 +179,7 @@ if page == "Risk Assessment":
         st.divider()
         st.subheader("Prediction Results")
         
-        # === 结果展示 (如果有高危，显示红色提示框) ===
-        if prob >= THRESHOLD:
-            st.markdown(f"""
-            <div style='background-color: #f8d7da; border-left: 5px solid #dc3545; padding: 15px; border-radius: 5px; margin-bottom: 20px;'>
-                <p style='color: #dc3545; font-weight: bold; font-size: 16px; margin: 0;'>
-                    ⚠️ High Risk Alert: This patient is in the high-risk group for 3-year mortality. 
-                    Consider closer surveillance (CTA every 3-6 months) and aggressive risk factor modification.
-                </p>
-            </div>
-            """, unsafe_allow_html=True)
+        # [已删除] 这里的红色高危弹窗代码已被移除，界面更清爽
 
         res_c1, res_c2 = st.columns([1, 1])
         
