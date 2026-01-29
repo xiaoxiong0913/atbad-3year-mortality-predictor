@@ -110,10 +110,7 @@ class ClinicalReportGenerator:
         if hosp > self.rules['Hosp']['long']:
             advice.append(f"5. **Recovery**: Prolonged hospitalization ({hosp} days). Assess for nosocomial complications and rehabilitation needs.")
 
-        # === 恢复：高危提示 (仅在报告中显示) ===
-        if self.prob >= self.threshold:
-            advice.append("---")
-            advice.append(f"<span style='color: #dc3545; font-weight: bold; font-size: 16px;'>⚠️ High Risk Alert: This patient is in the high-risk group for 3-year mortality. Consider closer surveillance (CTA every 3-6 months) and aggressive risk factor modification.</span>")
+        # [已删除] 原先此处的高危红色警示语代码已移除
             
         return "\n\n".join(advice)
 
