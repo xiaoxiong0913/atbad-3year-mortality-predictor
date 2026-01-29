@@ -1,32 +1,50 @@
-/* DR-MACE System Global Styles */
-
-/* 主背景色 */
-.main { 
-    background-color: #f8f9fa; 
+/* 全局字体优化 */
+html, body, [class*="css"] {
+    font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif;
 }
 
-/* 协议卡片通用样式 */
+/* 协议卡片样式 (Protocol Note) */
 .protocol-card {
-    padding: 15px;
+    padding: 1rem;
+    border-radius: 0.5rem;
+    margin-bottom: 1rem;
+    background-color: #ffffff;
+    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+    border: 1px solid #e0e0e0;
+}
+
+/* 信息提示框 (蓝色左边框) */
+.info-card {
+    border-left: 5px solid #17a2b8;
+    background-color: #f8f9fa;
+}
+
+/* 警告提示框 (黄色左边框) */
+.warning-card {
+    border-left: 5px solid #ffc107;
+    background-color: #fff3cd;
+}
+
+/* 高危提示框 (红色左边框) */
+.critical-card {
+    border-left: 5px solid #dc3545;
+    background-color: #f8d7da;
+}
+
+/* 安全提示框 (绿色左边框) */
+.safe-card {
+    border-left: 5px solid #28a745;
+    background-color: #d4edda;
+}
+
+/* 调整侧边栏的标题大小 */
+[data-testid="stSidebar"] h1 {
+    font-size: 2rem;
+    color: #003366;
+}
+
+/* 调整按钮样式 */
+div.stButton > button:first-child {
+    font-weight: bold;
     border-radius: 8px;
-    margin-bottom: 15px;
-    background-color: white;
-    box-shadow: 0 1px 3px rgba(0,0,0,0.1);
-    font-family: 'Segoe UI', sans-serif;
-}
-
-/* 风险等级边框颜色 */
-.critical-card { border-left: 5px solid #dc3545; }
-.warning-card { border-left: 5px solid #ffc107; }
-.info-card { border-left: 5px solid #17a2b8; }
-.safe-card { border-left: 5px solid #28a745; }
-
-/* 列表样式优化 */
-ul { 
-    padding-left: 20px; 
-    color: #444; 
-    font-size: 0.95em; 
-}
-li { 
-    margin-bottom: 5px; 
 }
