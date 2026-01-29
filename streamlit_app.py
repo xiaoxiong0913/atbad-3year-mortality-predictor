@@ -23,25 +23,46 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
-# 加载外部 CSS
+# 加载外部 CSS (新增字体放大)
 def local_css(file_name):
     try:
         with open(file_name) as f:
             st.markdown(f'<style>{f.read()}</style>', unsafe_allow_html=True)
     except FileNotFoundError:
-        st.markdown("""
-        <style>
-            .overview-card { 
-                background-color: #f8f9fa; 
-                padding: 20px; 
-                border-radius: 8px; 
-                border-left: 5px solid #007bff; 
-                box-shadow: 0 2px 4px rgba(0,0,0,0.05);
-                margin-bottom: 20px;
-            }
-            .stButton>button { width: 100%; font-weight: bold; }
-        </style>
-        """, unsafe_allow_html=True)
+        pass
+    
+    # === 强制注入字体放大样式 ===
+    st.markdown("""
+    <style>
+        /* 全局字体放大 */
+        html, body, [class*="css"] {
+            font-family: 'Helvetica Neue', sans-serif;
+            font-size: 18px; 
+        }
+        /* 输入框标签放大 */
+        .stNumberInput label, .stSelectbox label {
+            font-size: 1.2rem !important;
+            font-weight: 600 !important;
+        }
+        /* 按钮文字放大 */
+        .stButton>button {
+            font-size: 1.2rem !important;
+            height: 3.5em;
+            font-weight: bold;
+        }
+        /* Overview 卡片样式 */
+        .overview-card { 
+            background-color: #f8f9fa; 
+            padding: 25px; 
+            border-radius: 10px; 
+            border-left: 6px solid #007bff; 
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+            margin-bottom: 25px;
+        }
+        .overview-card h3 { margin-top: 0; font-size: 1.8rem; }
+        .overview-card p { font-size: 1.1rem; line-height: 1.6; }
+    </style>
+    """, unsafe_allow_html=True)
 
 local_css("assets/style.css")
 
@@ -81,15 +102,15 @@ with st.sidebar:
 
 # ================= 5. 页面路由逻辑 =================
 
-# ----------------- PAGE 1: 单例预测 (上下结构) -----------------
+# ----------------- PAGE 1: 单例预测 (上下结构 + 字体优化) -----------------
 if page == "Risk Assessment":
     
-    # 1. 顶部 Model Overview (直接放在输入界面上面)
+    # 1. 顶部 Model Overview
     st.markdown("""
     <div class='overview-card'>
-        <h3 style='margin-bottom:10px; margin-top:0;'>3-Year Mortality Prediction for Acute Type B Aortic Dissection</h3>
+        <h3 style='margin-bottom:10px;'>3-Year Mortality Prediction for Acute Type B Aortic Dissection</h3>
         <h4 style='margin-bottom:10px; color:#555;'>Model Overview</h4>
-        <p style='font-size:14px; line-height:1.5;'>
+        <p>
             This predictive tool uses an SVM machine learning model to estimate 3-year mortality risk in patients with acute Type B aortic dissection.<br>
             - AUC: <b>0.94</b><br>
             - Accuracy: <b>88.8%</b><br>
@@ -98,10 +119,9 @@ if page == "Risk Assessment":
     </div>
     """, unsafe_allow_html=True)
 
-    # 2. 输入表单 (Full Width)
+    # 2. 输入表单
     st.markdown("##### Patient Clinical Data")
     with st.form("input_form_atbad"):
-        # 为了美观，表单内部还是分列，但整体不再分左右栏
         c1, c2, c3 = st.columns(3)
         with c1:
             age = st.number_input("Age (years)", 20, 100, 60)
@@ -113,12 +133,11 @@ if page == "Risk Assessment":
             chd = st.selectbox("Coronary Heart Disease", [0, 1], format_func=lambda x: "Yes" if x==1 else "No")
         with c3:
             renal = st.selectbox("Renal Dysfunction", [0, 1], format_func=lambda x: "Yes" if x==1 else "No")
-            st.write("") # Spacer
-            st.write("") # Spacer
+            st.write("") 
+            st.write("") 
             submitted = st.form_submit_button("CALCULATE RISK", type="primary")
 
     if submitted and model:
-        # 特征映射
         cols = ['age', 'HR', 'BUN', 'coronary heart disease', 'HGB', 'hospitalization', 'renal dysfunction']
         inputs = {'age': age, 'HR': hr, 'BUN': bun, 'coronary heart disease': chd, 
                   'HGB': hgb, 'hospitalization': hosp, 'renal dysfunction': renal}
@@ -142,7 +161,6 @@ if page == "Risk Assessment":
         st.divider()
         st.subheader("Prediction Results")
         
-        # 结果展示区
         res_c1, res_c2 = st.columns([1, 1])
         
         with res_c1:
@@ -156,7 +174,7 @@ if page == "Risk Assessment":
             fig.update_layout(height=300, margin=dict(l=20,r=20,t=50,b=20))
             st.plotly_chart(fig, use_container_width=True)
 
-        # === SHAP 终极修复逻辑 ===
+        # === SHAP 暴力修复版 ===
         sv_clean = np.zeros(7)
         with res_c2:
             st.markdown("**Feature Contribution (SHAP)**")
@@ -166,28 +184,28 @@ if page == "Risk Assessment":
                     explainer = shap.KernelExplainer(model.predict_proba, background)
                     shap_values = explainer.shap_values(X_scl, nsamples=50)
                     
-                    # 1. 提取 List (如果是二分类，取 Class 1)
-                    if isinstance(shap_values, list):
-                        raw_vals = shap_values[1]
-                    else:
-                        raw_vals = shap_values
-                        
-                    # 2. 转 Numpy 并 Squeeze (去除多余的维度 1)
-                    raw_vals = np.array(raw_vals)
-                    raw_vals = np.squeeze(raw_vals) # 这一步会将 (1, 7) 变成 (7,)
+                    # 1. 强制转为 numpy array
+                    vals = np.array(shap_values)
                     
-                    # 3. 再次检查维度，防止 squeeze 过度 (例如单个特征)
-                    if raw_vals.ndim == 0: # 如果变成了 scalar
-                        raw_vals = np.array([raw_vals])
-                        
-                    # 4. 强制转为 Python Float List (解决 length-1 array error)
-                    sv_clean = [float(x) for x in raw_vals]
+                    # 2. 如果是 list/tuple 结构产生的 3D 数组 (1, 7, 2)，取 positive class
+                    if vals.ndim == 3: 
+                        vals = vals[0, :, 1] # 取第一个样本，所有特征，第二个类
+                    elif vals.ndim == 2:
+                        # 可能是 (1, 7) 或者 (2, 7) - 取 (1, 7) 的第一行
+                        if vals.shape[0] == 1:
+                            vals = vals[0, :]
                     
-                    # 5. 生成图表
+                    # 3. 终极展平：无论它是 (7,1) 还是 (1,7) 还是 (7,)，直接压成 1D
+                    vals = vals.flatten() 
+                    
+                    # 4. 如果长度不对 (不是7个特征)，说明取错了，兜底
+                    if len(vals) == 7:
+                        sv_clean = vals
+                    
                     base_val = explainer.expected_value[1] if isinstance(explainer.expected_value, list) else explainer.expected_value
 
                     exp = shap.Explanation(
-                        values=np.array(sv_clean), 
+                        values=sv_clean, 
                         base_values=base_val, 
                         data=df_raw.iloc[0].values, 
                         feature_names=cols
@@ -199,11 +217,10 @@ if page == "Risk Assessment":
                     plt.clf()
                 except Exception as shap_err:
                     st.warning(f"SHAP Analysis Unavailable: {shap_err}")
-                    # 发生错误时，确保 sv_clean 是列表，防止后面报错
-                    sv_clean = [0.0] * 7
 
         st.divider()
-        nlg = ClinicalReportGenerator(inputs, prob, THRESHOLD, sv_clean, cols, 0.5)
+        # 注意：这里传给 NLG 的 sv_clean 已经是纯 numpy array (1D)，非常安全
+        nlg = ClinicalReportGenerator(inputs, prob, THRESHOLD, sv_clean.tolist(), cols, 0.5)
         full_report = nlg.generate_full_report()
         
         with st.expander("📄 View Clinical Report", expanded=True):
